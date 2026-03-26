@@ -83,7 +83,7 @@ export default function MonthlyView() {
   const carLoans = data.loans?.car_loans || []
   const consumerLoans = data.loans?.consumer_loans || []
   const leasingItems = data.leasing?.items || []
-  const grandTotals = grandTotals || {}
+  const grandTotals = data.grand_totals || {}
   const remainingData = data.remaining || {}
   const distData = data.distribution || {}
   const distPerMonth = distData.per_month || {}
