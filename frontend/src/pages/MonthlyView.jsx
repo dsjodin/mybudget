@@ -79,10 +79,10 @@ export default function MonthlyView() {
   const expenseSections = data.expenses?.sections || []
   const incomeTotals = data.income?.totals || {}
   const expenseTotals = data.expenses?.totals || {}
-  const mortgages = data.loans?.mortgages || []
-  const carLoans = data.loans?.car_loans || []
-  const consumerLoans = data.loans?.consumer_loans || []
-  const leasingItems = data.leasing?.items || []
+  const mortgages = data.ungrouped_loans?.mortgages || []
+  const carLoans = data.ungrouped_loans?.car_loans || []
+  const consumerLoans = data.ungrouped_loans?.consumer_loans || []
+  const ungroupedLeasing = data.ungrouped_leasing || []
   const linkedCategories = data.linked_categories || {}
   const grandTotals = data.grand_totals || {}
   const remainingData = data.remaining || {}
@@ -284,7 +284,7 @@ export default function MonthlyView() {
           )}
 
           {/* ── CAR LOANS ── */}
-          {(carLoans.length > 0 || leasingItems.length > 0 || (linkedCategories.cars || []).length > 0) && (
+          {(carLoans.length > 0 || ungroupedLeasing.length > 0 || (linkedCategories.cars || []).length > 0) && (
             <tbody>
               <tr className="bg-purple-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-purple-800 text-sm uppercase tracking-wide">
@@ -301,10 +301,10 @@ export default function MonthlyView() {
                   <td></td>
                 </tr>
               ))}
-              {leasingItems.map(item => (
+              {ungroupedLeasing.map(item => (
                 <tr key={item.id} className="border-b hover:bg-purple-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">
-                    {item.vehicle_name}
+                    {item.name}
                     <span className="text-gray-400 ml-1 text-xs">(leasing)</span>
                   </td>
                   <FixedMonthValue value={item.monthly_cost} />
@@ -322,7 +322,7 @@ export default function MonthlyView() {
                 <td className="py-1.5 px-3">Summa bilar</td>
                 {months.map(m => {
                   const loanCost = carLoans.reduce((s, l) => s + l.interest + l.amortization, 0)
-                  const leasingCost = data.leasing?.total_cost || 0
+                  const leasingCost = ungroupedLeasing.reduce((s, l) => s + l.monthly_cost, 0)
                   const linkedCost = (linkedCategories.cars || []).reduce((s, c) => s + (c.amounts?.[String(m)] || 0), 0)
                   return (
                     <td key={m} className="py-1.5 px-2 text-right text-sm font-semibold">
@@ -384,6 +384,21 @@ export default function MonthlyView() {
                   {section.name}
                 </td>
               </tr>
+              {(section.fixed_items || []).map(fi => (
+                <tr key={fi.id} className="border-b hover:bg-red-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">
+                    {fi.name}
+                    {fi.is_loan && fi.detail && (
+                      <span className="text-gray-400 ml-1 text-xs">({fi.detail})</span>
+                    )}
+                    {fi.is_leasing && (
+                      <span className="text-gray-400 ml-1 text-xs">(leasing)</span>
+                    )}
+                  </td>
+                  <FixedMonthValue value={fi.fixed_value} />
+                  <td></td>
+                </tr>
+              ))}
               {section.items.map(item => (
                 <tr key={item.id} className="border-b hover:bg-red-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">{item.name}</td>

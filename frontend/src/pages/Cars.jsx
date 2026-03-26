@@ -8,6 +8,7 @@ export default function Cars() {
   const [carLoans, setCarLoans] = useState([])
   const [leasingContracts, setLeasingContracts] = useState([])
   const [paymentAccounts, setPaymentAccounts] = useState([])
+  const [categories, setCategories] = useState([])
   const [showLoanForm, setShowLoanForm] = useState(false)
   const [showLeasingForm, setShowLeasingForm] = useState(false)
   const [editingLoan, setEditingLoan] = useState(null)
@@ -15,12 +16,12 @@ export default function Cars() {
   const [loanForm, setLoanForm] = useState({
     name: '', lender: '', original_amount: '', current_balance: '',
     interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '',
-    payment_account_id: '',
+    payment_account_id: '', category_id: '',
   })
   const [leasingForm, setLeasingForm] = useState({
     vehicle_name: '', monthly_cost: '', start_date: '', end_date: '',
     term_months: '', residual_value: '', mileage_limit: '', note: '',
-    payment_account_id: '',
+    payment_account_id: '', category_id: '',
   })
 
   useEffect(() => { loadAll() }, [])
@@ -29,6 +30,7 @@ export default function Cars() {
     api.getLoans('car').then(setCarLoans)
     api.getLeasingContracts().then(setLeasingContracts)
     api.getPaymentAccounts().then(setPaymentAccounts)
+    api.getCategories().then(cats => setCategories(cats.filter(c => !c.parent_id && c.category_type === 'expense')))
   }
 
   // Car loan handlers
@@ -42,6 +44,7 @@ export default function Cars() {
       monthly_amortization: parseFloat(loanForm.monthly_amortization) || 0,
       loan_type: 'car',
       payment_account_id: loanForm.payment_account_id ? parseInt(loanForm.payment_account_id) : null,
+      category_id: loanForm.category_id ? parseInt(loanForm.category_id) : null,
     }
     if (editingLoan) {
       await api.updateLoan(editingLoan, data)
@@ -66,13 +69,14 @@ export default function Cars() {
       current_balance: String(loan.current_balance), interest_rate: String(loan.interest_rate * 100),
       rate_type: loan.rate_type, start_date: loan.start_date, monthly_amortization: String(loan.monthly_amortization),
       payment_account_id: loan.payment_account_id ? String(loan.payment_account_id) : '',
+      category_id: loan.category_id ? String(loan.category_id) : '',
     })
     setEditingLoan(loan.id)
     setShowLoanForm(true)
   }
 
   const openNewLoan = () => {
-    setLoanForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '', payment_account_id: '' })
+    setLoanForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '', payment_account_id: '', category_id: '' })
     setEditingLoan(null)
     setShowLoanForm(true)
   }
@@ -87,6 +91,7 @@ export default function Cars() {
       residual_value: leasingForm.residual_value ? parseFloat(leasingForm.residual_value) : null,
       mileage_limit: leasingForm.mileage_limit ? parseInt(leasingForm.mileage_limit) : null,
       payment_account_id: leasingForm.payment_account_id ? parseInt(leasingForm.payment_account_id) : null,
+      category_id: leasingForm.category_id ? parseInt(leasingForm.category_id) : null,
     }
     if (editingLeasing) {
       await api.updateLeasingContract(editingLeasing, data)
@@ -112,13 +117,14 @@ export default function Cars() {
       residual_value: c.residual_value ? String(c.residual_value) : '',
       mileage_limit: c.mileage_limit ? String(c.mileage_limit) : '', note: c.note || '',
       payment_account_id: c.payment_account_id ? String(c.payment_account_id) : '',
+      category_id: c.category_id ? String(c.category_id) : '',
     })
     setEditingLeasing(c.id)
     setShowLeasingForm(true)
   }
 
   const openNewLeasing = () => {
-    setLeasingForm({ vehicle_name: '', monthly_cost: '', start_date: '', end_date: '', term_months: '', residual_value: '', mileage_limit: '', note: '', payment_account_id: '' })
+    setLeasingForm({ vehicle_name: '', monthly_cost: '', start_date: '', end_date: '', term_months: '', residual_value: '', mileage_limit: '', note: '', payment_account_id: '', category_id: '' })
     setEditingLeasing(null)
     setShowLeasingForm(true)
   }
@@ -269,6 +275,19 @@ export default function Cars() {
               <input type="number" value={loanForm.monthly_amortization} onChange={e => setLoanForm({ ...loanForm, monthly_amortization: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2" placeholder="0" />
             </div>
+            {categories.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Visa under kategori</label>
+                <select value={loanForm.category_id} onChange={e => setLoanForm({ ...loanForm, category_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">-- Separat sektion --</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Gruppera detta lan under en utgiftskategori i manadsvyn.</p>
+              </div>
+            )}
             {paymentAccounts.length > 0 && (
               <div>
                 <label className="block text-sm font-medium mb-1">Betalningskonto</label>
@@ -338,6 +357,19 @@ export default function Cars() {
               <input type="text" value={leasingForm.note} onChange={e => setLeasingForm({ ...leasingForm, note: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2" />
             </div>
+            {categories.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Visa under kategori</label>
+                <select value={leasingForm.category_id} onChange={e => setLeasingForm({ ...leasingForm, category_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">-- Separat sektion --</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Gruppera under en utgiftskategori i manadsvyn.</p>
+              </div>
+            )}
             {paymentAccounts.length > 0 && (
               <div>
                 <label className="block text-sm font-medium mb-1">Betalningskonto</label>

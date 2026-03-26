@@ -9,6 +9,7 @@ import { RATE_TYPES } from '../utils/constants'
 export default function Mortgages() {
   const [loans, setLoans] = useState([])
   const [paymentAccounts, setPaymentAccounts] = useState([])
+  const [categories, setCategories] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [showRateModal, setShowRateModal] = useState(null)
@@ -19,12 +20,13 @@ export default function Mortgages() {
   const [form, setForm] = useState({
     name: '', lender: '', original_amount: '', current_balance: '',
     interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '',
-    payment_account_id: '',
+    payment_account_id: '', category_id: '',
   })
 
   useEffect(() => {
     loadLoans()
     api.getPaymentAccounts().then(setPaymentAccounts)
+    api.getCategories().then(cats => setCategories(cats.filter(c => !c.parent_id && c.category_type === 'expense')))
   }, [])
 
   const loadLoans = () => api.getLoans('mortgage').then(setLoans)
@@ -39,6 +41,7 @@ export default function Mortgages() {
       monthly_amortization: parseFloat(form.monthly_amortization) || 0,
       loan_type: 'mortgage',
       payment_account_id: form.payment_account_id ? parseInt(form.payment_account_id) : null,
+      category_id: form.category_id ? parseInt(form.category_id) : null,
     }
     if (editing) {
       await api.updateLoan(editing, data)
@@ -63,13 +66,14 @@ export default function Mortgages() {
       current_balance: String(loan.current_balance), interest_rate: String(loan.interest_rate * 100),
       rate_type: loan.rate_type, start_date: loan.start_date, monthly_amortization: String(loan.monthly_amortization),
       payment_account_id: loan.payment_account_id ? String(loan.payment_account_id) : '',
+      category_id: loan.category_id ? String(loan.category_id) : '',
     })
     setEditing(loan.id)
     setShowForm(true)
   }
 
   const openNew = () => {
-    setForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '', payment_account_id: '' })
+    setForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '', payment_account_id: '', category_id: '' })
     setEditing(null)
     setShowForm(true)
   }
@@ -204,6 +208,19 @@ export default function Mortgages() {
                   className="w-full border rounded-lg px-3 py-2" placeholder="0" />
               </div>
             </div>
+            {categories.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Visa under kategori</label>
+                <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">-- Separat sektion --</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Gruppera detta lan under en utgiftskategori i manadsvyn.</p>
+              </div>
+            )}
             {paymentAccounts.length > 0 && (
               <div>
                 <label className="block text-sm font-medium mb-1">Betalningskonto</label>

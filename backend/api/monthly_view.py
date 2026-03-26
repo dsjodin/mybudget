@@ -34,6 +34,7 @@ def monthly_view():
 
     # Load categories
     categories = Category.query.order_by(Category.sort_order).all()
+    cat_by_id = {c.id: c for c in categories}
 
     top_level = [c for c in categories if c.parent_id is None]
     children_map = {}
@@ -46,6 +47,60 @@ def monthly_view():
     for m in months:
         month_actuals[m] = get_month_data(year, m, categories, top_level, children_map)
 
+    # Load loans and leasing
+    loans = Loan.query.order_by(Loan.name).all()
+    leasing = LeasingContract.query.all()
+
+    # Map loans/leasing by category_id for grouping
+    loans_by_category = {}  # category_id -> [loan_items]
+    ungrouped_loans = {"mortgage": [], "car": [], "consumer": []}
+    total_interest = 0
+    total_amortization = 0
+
+    for loan in loans:
+        interest = loan.monthly_interest_cost()
+        amort = float(loan.monthly_amortization)
+        total_interest += interest
+        total_amortization += amort
+        item = {
+            "id": f"loan-{loan.id}",
+            "name": loan.name,
+            "lender": loan.lender,
+            "balance": float(loan.current_balance),
+            "rate": float(loan.interest_rate),
+            "rate_type": loan.rate_type,
+            "loan_type": loan.loan_type,
+            "interest": round(interest, 2),
+            "amortization": round(amort, 2),
+            "monthly_cost": round(interest + amort, 2),
+            "is_loan": True,
+        }
+        if loan.category_id and loan.category_id in cat_by_id:
+            loans_by_category.setdefault(loan.category_id, []).append(item)
+        else:
+            ungrouped_loans[loan.loan_type].append(item)
+
+    leasing_by_category = {}
+    ungrouped_leasing = []
+    leasing_total = 0
+
+    for lc in leasing:
+        cost = float(lc.monthly_cost)
+        leasing_total += cost
+        item = {
+            "id": f"leasing-{lc.id}",
+            "name": lc.vehicle_name,
+            "monthly_cost": round(cost, 2),
+            "is_leasing": True,
+        }
+        if lc.category_id and lc.category_id in cat_by_id:
+            leasing_by_category.setdefault(lc.category_id, []).append(item)
+        else:
+            ungrouped_leasing.append(item)
+
+    # Fixed monthly costs (loans + leasing) - same each month
+    fixed_monthly = round(total_interest + total_amortization + leasing_total, 2)
+
     # Build category sections (exclude categories with linked_section)
     linked_cat_ids = {c.id for c in categories if c.linked_section}
 
@@ -57,8 +112,10 @@ def monthly_view():
             if parent.id in linked_cat_ids:
                 continue
             children = [c for c in children_map.get(parent.id, []) if c.id not in linked_cat_ids]
+
+            # Build regular category items
+            items = []
             if children:
-                items = []
                 for child in children:
                     amounts = {}
                     for m in months:
@@ -68,40 +125,69 @@ def monthly_view():
                         "name": child.name,
                         "amounts": amounts,
                     })
-                # Section subtotals per month
-                subtotals = {}
-                for m in months:
-                    subtotals[str(m)] = sum(
-                        month_actuals[m].get(child.id, 0) for child in children
-                    ) + month_actuals[m].get(parent.id, 0)
-                sections.append({
-                    "id": parent.id,
-                    "name": parent.name,
-                    "items": items,
-                    "subtotals": subtotals,
-                })
             else:
                 amounts = {}
                 for m in months:
                     amounts[str(m)] = month_actuals[m].get(parent.id, 0)
-                sections.append({
+                items.append({
                     "id": parent.id,
                     "name": parent.name,
-                    "items": [{
-                        "id": parent.id,
-                        "name": parent.name,
-                        "amounts": amounts,
-                    }],
-                    "subtotals": amounts,
+                    "amounts": amounts,
                 })
+
+            # Add loans grouped under this category
+            grouped_loans = loans_by_category.get(parent.id, [])
+            grouped_leasing = leasing_by_category.get(parent.id, [])
+
+            # Also check if loans are assigned to child categories
+            for child in children:
+                grouped_loans.extend(loans_by_category.get(child.id, []))
+                grouped_leasing.extend(leasing_by_category.get(child.id, []))
+
+            fixed_items = []
+            for loan_item in grouped_loans:
+                fixed_items.append({
+                    "id": loan_item["id"],
+                    "name": loan_item["name"],
+                    "is_fixed": True,
+                    "is_loan": True,
+                    "fixed_value": loan_item["monthly_cost"],
+                    "detail": f"{loan_item['rate']*100:.2f}%" if loan_item.get("rate") else None,
+                })
+            for leasing_item in grouped_leasing:
+                fixed_items.append({
+                    "id": leasing_item["id"],
+                    "name": leasing_item["name"],
+                    "is_fixed": True,
+                    "is_leasing": True,
+                    "fixed_value": leasing_item["monthly_cost"],
+                })
+
+            # Calculate subtotals including fixed items
+            fixed_cost = sum(fi["fixed_value"] for fi in fixed_items)
+            subtotals = {}
+            for m in months:
+                ms = str(m)
+                cat_total = sum(
+                    month_actuals[m].get(child.id, 0) for child in children
+                ) + month_actuals[m].get(parent.id, 0) if children else month_actuals[m].get(parent.id, 0)
+                subtotals[ms] = round(cat_total + fixed_cost, 2)
+
+            sections.append({
+                "id": parent.id,
+                "name": parent.name,
+                "items": items,
+                "fixed_items": fixed_items,
+                "subtotals": subtotals,
+            })
         return sections
 
     income_sections = build_sections("income")
     expense_sections = build_sections("expense")
 
     # Build linked category items per section (cars, mortgage, consumer_loan)
-    linked_items = {}  # section -> list of {id, name, amounts}
-    linked_totals = {}  # section -> {month_str: total}
+    linked_items = {}
+    linked_totals = {}
     for c in categories:
         if c.linked_section:
             amounts = {}
@@ -125,53 +211,20 @@ def monthly_view():
         income_totals[ms] = round(sum(s["subtotals"].get(ms, 0) for s in income_sections), 2)
         expense_totals[ms] = round(sum(s["subtotals"].get(ms, 0) for s in expense_sections), 2)
 
-    # Loans (same for all months - current snapshot)
-    loans = Loan.query.order_by(Loan.name).all()
-    mortgage_items = []
-    car_loan_items = []
-    consumer_loan_items = []
-    total_interest = 0
-    total_amortization = 0
-
-    for loan in loans:
-        interest = loan.monthly_interest_cost()
-        amort = float(loan.monthly_amortization)
-        total_interest += interest
-        total_amortization += amort
-        item = {
-            "id": loan.id,
-            "name": loan.name,
-            "lender": loan.lender,
-            "balance": float(loan.current_balance),
-            "rate": float(loan.interest_rate),
-            "rate_type": loan.rate_type,
-            "loan_type": loan.loan_type,
-            "interest": round(interest, 2),
-            "amortization": round(amort, 2),
-        }
-        if loan.loan_type == "mortgage":
-            mortgage_items.append(item)
-        elif loan.loan_type == "car":
-            car_loan_items.append(item)
-        else:
-            consumer_loan_items.append(item)
-
-    # Leasing
-    leasing = LeasingContract.query.all()
-    leasing_total = sum(float(c.monthly_cost) for c in leasing)
-
-    # Fixed monthly costs (loans + leasing) - same each month
-    fixed_monthly = round(total_interest + total_amortization + leasing_total, 2)
-
     # Grand totals & remaining per month
+    # expense_totals already includes loans/leasing grouped into categories
+    # We need to add ungrouped loans/leasing and linked categories
+    ungrouped_loan_cost = sum(l["monthly_cost"] for l in ungrouped_loans["mortgage"])
+    ungrouped_loan_cost += sum(l["monthly_cost"] for l in ungrouped_loans["car"])
+    ungrouped_loan_cost += sum(l["monthly_cost"] for l in ungrouped_loans["consumer"])
+    ungrouped_loan_cost += sum(l["monthly_cost"] for l in ungrouped_leasing)
+
     grand_totals = {}
     remaining = {}
-    total_linked = {}
     for m in months:
         ms = str(m)
         linked_sum = sum(section_totals.get(ms, 0) for section_totals in linked_totals.values())
-        total_linked[ms] = round(linked_sum, 2)
-        gt = expense_totals[ms] + fixed_monthly + linked_sum
+        gt = expense_totals[ms] + ungrouped_loan_cost + linked_sum
         grand_totals[ms] = round(gt, 2)
         remaining[ms] = round(income_totals[ms] - gt, 2)
 
@@ -184,7 +237,6 @@ def monthly_view():
         DistributionSetting.sort_order
     ).all()
 
-    # Distribution per month
     distribution_per_month = {}
     for m in months:
         ms = str(m)
@@ -205,22 +257,18 @@ def monthly_view():
             "accounts": dist_accounts,
         }
 
-    # Payment account summary: sum expenses per payment account per month
+    # Payment account summary
     payment_accounts = PaymentAccount.query.order_by(PaymentAccount.sort_order).all()
     cat_account_map = {c.id: c.payment_account_id for c in categories if c.payment_account_id}
-
-    # Also map parent account to children that don't have their own
     for c in categories:
         if c.parent_id and c.id not in cat_account_map and c.parent_id in cat_account_map:
             cat_account_map[c.id] = cat_account_map[c.parent_id]
 
-    # Build per-loan and per-leasing payment account costs (fixed monthly, same each month)
-    loan_pa_costs = {}  # payment_account_id -> monthly cost
+    loan_pa_costs = {}
     for loan in loans:
         if loan.payment_account_id:
             cost = float(loan.monthly_amortization) + loan.monthly_interest_cost()
             loan_pa_costs[loan.payment_account_id] = loan_pa_costs.get(loan.payment_account_id, 0) + cost
-
     for lc in leasing:
         if lc.payment_account_id:
             loan_pa_costs[lc.payment_account_id] = loan_pa_costs.get(lc.payment_account_id, 0) + float(lc.monthly_cost)
@@ -251,19 +299,13 @@ def monthly_view():
             "sections": expense_sections,
             "totals": expense_totals,
         },
-        "loans": {
-            "mortgages": mortgage_items,
-            "car_loans": car_loan_items,
-            "consumer_loans": consumer_loan_items,
-            "total_interest": round(total_interest, 2),
-            "total_amortization": round(total_amortization, 2),
+        "ungrouped_loans": {
+            "mortgages": ungrouped_loans["mortgage"],
+            "car_loans": ungrouped_loans["car"],
+            "consumer_loans": ungrouped_loans["consumer"],
         },
-        "leasing": {
-            "items": [c.to_dict() for c in leasing],
-            "total_cost": round(leasing_total, 2),
-        },
+        "ungrouped_leasing": ungrouped_leasing,
         "linked_categories": linked_items,
-        "fixed_monthly": fixed_monthly,
         "grand_totals": grand_totals,
         "remaining": remaining,
         "distribution": {
