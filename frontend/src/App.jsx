@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
-import Budget from './pages/Budget'
+import MonthlyView from './pages/MonthlyView'
 import Transactions from './pages/Transactions'
 import Loans from './pages/Loans'
 import Leasing from './pages/Leasing'
@@ -14,7 +14,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/budget" element={<Budget />} />
+        <Route path="/budget" element={<MonthlyView />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/loans" element={<Loans />} />
         <Route path="/leasing" element={<Leasing />} />

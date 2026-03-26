@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: '📊' },
-  { path: '/budget', label: 'Budget', icon: '📋' },
+  { path: '/budget', label: 'Månadsvy', icon: '📋' },
   { path: '/transactions', label: 'Transaktioner', icon: '💳' },
   { path: '/loans', label: 'Lån & Bolån', icon: '🏦' },
   { path: '/leasing', label: 'Leasing', icon: '🚗' },

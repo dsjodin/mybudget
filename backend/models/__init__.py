@@ -5,6 +5,7 @@ from models.loan import Loan, LoanRateHistory
 from models.leasing import LeasingContract
 from models.savings_account import SavingsAccount, SavingsTransaction
 from models.scenario import Scenario, ScenarioOverride
+from models.distribution_setting import DistributionSetting, AppSetting
 
 __all__ = [
     "Category",
@@ -17,4 +18,6 @@ __all__ = [
     "SavingsTransaction",
     "Scenario",
     "ScenarioOverride",
+    "DistributionSetting",
+    "AppSetting",
 ]
