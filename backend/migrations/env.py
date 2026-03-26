@@ -6,7 +6,10 @@ from alembic import context
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    try:
+        fileConfig(config.config_file_name)
+    except KeyError:
+        pass
 logger = logging.getLogger('alembic.env')
 
 
