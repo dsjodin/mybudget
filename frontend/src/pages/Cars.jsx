@@ -30,7 +30,7 @@ export default function Cars() {
     api.getLoans('car').then(setCarLoans)
     api.getLeasingContracts().then(setLeasingContracts)
     api.getPaymentAccounts().then(setPaymentAccounts)
-    api.getCategories().then(cats => setCategories(cats.filter(c => !c.parent_id && c.category_type === 'expense')))
+    api.getCategories().then(cats => setCategories(cats.filter(c => c.category_type === 'expense')))
   }
 
   // Car loan handlers
@@ -281,8 +281,13 @@ export default function Cars() {
                 <select value={loanForm.category_id} onChange={e => setLoanForm({ ...loanForm, category_id: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2">
                   <option value="">-- Separat sektion --</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {categories.filter(c => !c.parent_id).map(parent => (
+                    <optgroup key={parent.id} label={parent.name}>
+                      <option value={parent.id}>{parent.name}</option>
+                      {categories.filter(c => c.parent_id === parent.id).map(child => (
+                        <option key={child.id} value={child.id}>&nbsp;&nbsp;{child.name}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 <p className="text-xs text-gray-400 mt-1">Gruppera detta lan under en utgiftskategori i manadsvyn.</p>
@@ -363,8 +368,13 @@ export default function Cars() {
                 <select value={leasingForm.category_id} onChange={e => setLeasingForm({ ...leasingForm, category_id: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2">
                   <option value="">-- Separat sektion --</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {categories.filter(c => !c.parent_id).map(parent => (
+                    <optgroup key={parent.id} label={parent.name}>
+                      <option value={parent.id}>{parent.name}</option>
+                      {categories.filter(c => c.parent_id === parent.id).map(child => (
+                        <option key={child.id} value={child.id}>&nbsp;&nbsp;{child.name}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
                 <p className="text-xs text-gray-400 mt-1">Gruppera under en utgiftskategori i manadsvyn.</p>
