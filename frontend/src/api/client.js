@@ -62,9 +62,9 @@ export const api = {
   setSavingsBalance: (id, data) => request(`/savings/${id}/set-balance`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Monthly View
-  getMonthlyView: (year, month) => request(`/api/monthly-view?year=${year}&month=${month}`),
-  getDistributionSettings: () => request('/api/distribution-settings'),
-  updateDistributionSettings: (data) => request('/api/distribution-settings', { method: 'PUT', body: JSON.stringify(data) }),
+  getMonthlyView: (year, month) => request(`/monthly-view?year=${year}&month=${month}`),
+  getDistributionSettings: () => request('/distribution-settings'),
+  updateDistributionSettings: (data) => request('/distribution-settings', { method: 'PUT', body: JSON.stringify(data) }),
 
   // Dashboard
   getDashboardSummary: (year, month) => request(`/dashboard/summary?year=${year}&month=${month}`),
