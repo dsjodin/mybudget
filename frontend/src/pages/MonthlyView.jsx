@@ -74,6 +74,20 @@ export default function MonthlyView() {
 
   if (!data) return <div className="text-center py-12 text-gray-500">Laddar...</div>
 
+  // Defensive defaults for all nested data
+  const incomeSections = data.income?.sections || []
+  const expenseSections = data.expenses?.sections || []
+  const incomeTotals = data.income?.totals || {}
+  const expenseTotals = data.expenses?.totals || {}
+  const mortgages = data.loans?.mortgages || []
+  const carLoans = data.loans?.car_loans || []
+  const consumerLoans = data.loans?.consumer_loans || []
+  const leasingItems = data.leasing?.items || []
+  const grandTotals = grandTotals || {}
+  const remainingData = data.remaining || {}
+  const distData = data.distribution || {}
+  const distPerMonth = distData.per_month || {}
+
   const colCount = months.length
 
   const EditableCell = ({ categoryId, month, value }) => {
@@ -183,7 +197,7 @@ export default function MonthlyView() {
               </td>
             </tr>
           </tbody>
-          {data.income.sections.map(section => (
+          {incomeSections.map(section => (
             <tbody key={section.id}>
               {section.items.length > 1 && (
                 <tr className="bg-green-50/40 border-b">
@@ -204,13 +218,13 @@ export default function MonthlyView() {
           <tbody>
             <tr className="bg-green-100 border-b font-bold">
               <td className="py-2 px-3">Summa inkomster</td>
-              <StaticMonthValues values={data.income.totals} />
+              <StaticMonthValues values={incomeTotals} />
               <td></td>
             </tr>
           </tbody>
 
           {/* ── MORTGAGES ── */}
-          {data.loans.mortgages.length > 0 && (
+          {mortgages.length > 0 && (
             <tbody>
               <tr className="bg-yellow-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-yellow-800 text-sm uppercase tracking-wide">
@@ -224,7 +238,7 @@ export default function MonthlyView() {
                 ))}
                 <td></td>
               </tr>
-              {data.loans.mortgages.map(loan => (
+              {mortgages.map(loan => (
                 <tr key={loan.id} className="border-b hover:bg-yellow-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">
                     {loan.name}
@@ -235,17 +249,17 @@ export default function MonthlyView() {
                   <td></td>
                 </tr>
               ))}
-              {data.loans.mortgages.some(l => l.amortization > 0) && (
+              {mortgages.some(l => l.amortization > 0) && (
                 <tr className="border-b hover:bg-yellow-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">Amortering</td>
-                  <FixedMonthValue value={data.loans.mortgages.reduce((s, l) => s + l.amortization, 0)} />
+                  <FixedMonthValue value={mortgages.reduce((s, l) => s + l.amortization, 0)} />
                   <td></td>
                 </tr>
               )}
               <tr className="bg-yellow-50/50 border-b font-semibold text-sm">
                 <td className="py-1.5 px-3">Summa bolan</td>
                 <FixedMonthValue value={
-                  data.loans.mortgages.reduce((s, l) => s + l.interest + l.amortization, 0)
+                  mortgages.reduce((s, l) => s + l.interest + l.amortization, 0)
                 } />
                 <td></td>
               </tr>
@@ -253,14 +267,14 @@ export default function MonthlyView() {
           )}
 
           {/* ── CAR LOANS ── */}
-          {(data.loans.car_loans.length > 0 || data.leasing.items.length > 0) && (
+          {(carLoans.length > 0 || leasingItems.length > 0) && (
             <tbody>
               <tr className="bg-purple-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-purple-800 text-sm uppercase tracking-wide">
                   Bilar
                 </td>
               </tr>
-              {data.loans.car_loans.map(loan => (
+              {carLoans.map(loan => (
                 <tr key={loan.id} className="border-b hover:bg-purple-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">
                     {loan.name}
@@ -270,7 +284,7 @@ export default function MonthlyView() {
                   <td></td>
                 </tr>
               ))}
-              {data.leasing.items.map(item => (
+              {leasingItems.map(item => (
                 <tr key={item.id} className="border-b hover:bg-purple-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">
                     {item.vehicle_name}
@@ -283,8 +297,8 @@ export default function MonthlyView() {
               <tr className="bg-purple-50/50 border-b font-semibold text-sm">
                 <td className="py-1.5 px-3">Summa bilar</td>
                 <FixedMonthValue value={
-                  data.loans.car_loans.reduce((s, l) => s + l.interest + l.amortization, 0) +
-                  data.leasing.total_cost
+                  carLoans.reduce((s, l) => s + l.interest + l.amortization, 0) +
+                  (data.leasing?.total_cost || 0)
                 } />
                 <td></td>
               </tr>
@@ -292,14 +306,14 @@ export default function MonthlyView() {
           )}
 
           {/* ── CONSUMER LOANS ── */}
-          {data.loans.consumer_loans.length > 0 && (
+          {consumerLoans.length > 0 && (
             <tbody>
               <tr className="bg-orange-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-orange-800 text-sm uppercase tracking-wide">
                   Konsumtionslan
                 </td>
               </tr>
-              {data.loans.consumer_loans.map(loan => (
+              {consumerLoans.map(loan => (
                 <tr key={loan.id} className="border-b hover:bg-orange-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">
                     {loan.name}
@@ -311,14 +325,14 @@ export default function MonthlyView() {
               ))}
               <tr className="bg-orange-50/50 border-b font-semibold text-sm">
                 <td className="py-1.5 px-3">Summa konsumtionslan</td>
-                <FixedMonthValue value={data.loans.consumer_loans.reduce((s, l) => s + l.interest + l.amortization, 0)} />
+                <FixedMonthValue value={consumerLoans.reduce((s, l) => s + l.interest + l.amortization, 0)} />
                 <td></td>
               </tr>
             </tbody>
           )}
 
           {/* ── EXPENSES BY SECTION ── */}
-          {data.expenses.sections.map(section => (
+          {expenseSections.map(section => (
             <tbody key={section.id}>
               <tr className="bg-red-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-red-800 text-sm uppercase tracking-wide">
@@ -344,7 +358,7 @@ export default function MonthlyView() {
           <tbody>
             <tr className="bg-gray-200 border-b border-gray-400 font-bold text-base">
               <td className="py-3 px-3">Total kostnad</td>
-              <StaticMonthValues values={data.grand_totals} />
+              <StaticMonthValues values={grandTotals} />
               <td></td>
             </tr>
           </tbody>
@@ -354,7 +368,7 @@ export default function MonthlyView() {
             <tr className="bg-blue-100 border-b font-bold text-lg">
               <td className="py-3 px-3 text-blue-900">Kvar</td>
               {months.map(m => {
-                const val = data.remaining[String(m)] || 0
+                const val = remainingData[String(m)] || 0
                 return (
                   <td key={m} className={`py-3 px-2 text-right ${val >= 0 ? 'text-blue-900' : 'text-red-600'}`}>
                     {formatSEK(val)}
@@ -374,21 +388,21 @@ export default function MonthlyView() {
             </tr>
             <tr className="border-b">
               <td className="py-1.5 px-3 pl-6 text-sm">
-                Fickpengar ({data.distribution.pocket_money_persons} x {formatSEK(data.distribution.pocket_money_per_person)})
+                Fickpengar ({(distData.pocket_money_persons || 0)} x {formatSEK((distData.pocket_money_per_person || 0))})
               </td>
-              <FixedMonthValue value={-data.distribution.pocket_money_total} />
+              <FixedMonthValue value={-(distData.pocket_money_total || 0)} />
               <td></td>
             </tr>
             <tr className="border-b font-semibold">
               <td className="py-1.5 px-3 pl-6 text-sm">Att fordela</td>
               {months.map(m => (
                 <td key={m} className="py-1.5 px-2 text-right text-sm">
-                  {formatSEK(data.distribution.per_month[String(m)]?.distributable || 0)}
+                  {formatSEK(distPerMonth[String(m)]?.distributable || 0)}
                 </td>
               ))}
               <td></td>
             </tr>
-            {data.distribution.per_month[String(months[0])]?.accounts?.map(acc => (
+            {distPerMonth[String(months[0])]?.accounts?.map(acc => (
               <tr key={acc.id} className="border-b hover:bg-indigo-50/30">
                 <td className="py-1.5 px-3 pl-6 text-sm">
                   {acc.name}
@@ -396,7 +410,7 @@ export default function MonthlyView() {
                   <span className="text-gray-400 ml-2 text-xs">Saldo: {formatSEK(acc.current_balance)}</span>
                 </td>
                 {months.map(m => {
-                  const mAcc = data.distribution.per_month[String(m)]?.accounts?.find(a => a.id === acc.id)
+                  const mAcc = distPerMonth[String(m)]?.accounts?.find(a => a.id === acc.id)
                   return (
                     <td key={m} className="py-1.5 px-2 text-right text-sm text-green-600">
                       +{formatSEK(mAcc?.amount || 0)}
@@ -406,7 +420,7 @@ export default function MonthlyView() {
                 <td></td>
               </tr>
             ))}
-            {(!data.distribution.per_month[String(months[0])]?.accounts?.length) && (
+            {(!distPerMonth[String(months[0])]?.accounts?.length) && (
               <tr className="border-b">
                 <td colSpan={colCount + 2} className="py-3 px-3 pl-6 text-sm text-gray-400 italic">
                   Ingen fordelning konfigurerad. Klicka "Fordelning" ovan.
