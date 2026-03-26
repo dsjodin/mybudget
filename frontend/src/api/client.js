@@ -21,6 +21,12 @@ export const api = {
   deleteCategory: (id) => request(`/categories/${id}`, { method: 'DELETE' }),
   reorderCategories: (order) => request('/categories/reorder', { method: 'PATCH', body: JSON.stringify({ order }) }),
 
+  // Payment Accounts
+  getPaymentAccounts: () => request('/payment-accounts'),
+  createPaymentAccount: (data) => request('/payment-accounts', { method: 'POST', body: JSON.stringify(data) }),
+  updatePaymentAccount: (id, data) => request(`/payment-accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePaymentAccount: (id) => request(`/payment-accounts/${id}`, { method: 'DELETE' }),
+
   // Budget
   getBudget: (year, month) => {
     let url = `/budget?year=${year}`

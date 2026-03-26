@@ -6,6 +6,7 @@ from models.loan import Loan
 from models.leasing import LeasingContract
 from models.savings_account import SavingsAccount
 from models.distribution_setting import DistributionSetting, AppSetting
+from models.payment_account import PaymentAccount
 from sqlalchemy import func, extract
 from datetime import date
 
@@ -179,6 +180,29 @@ def monthly_view():
             "accounts": dist_accounts,
         }
 
+    # Payment account summary: sum expenses per payment account per month
+    payment_accounts = PaymentAccount.query.order_by(PaymentAccount.sort_order).all()
+    cat_account_map = {c.id: c.payment_account_id for c in categories if c.payment_account_id}
+
+    # Also map parent account to children that don't have their own
+    for c in categories:
+        if c.parent_id and c.id not in cat_account_map and c.parent_id in cat_account_map:
+            cat_account_map[c.id] = cat_account_map[c.parent_id]
+
+    account_summaries = []
+    for pa in payment_accounts:
+        pa_cat_ids = [cid for cid, paid in cat_account_map.items() if paid == pa.id]
+        totals_per_month = {}
+        for m in months:
+            ms = str(m)
+            total = sum(month_actuals[m].get(cid, 0) for cid in pa_cat_ids)
+            totals_per_month[ms] = round(total, 2)
+        account_summaries.append({
+            "id": pa.id,
+            "name": pa.name,
+            "totals": totals_per_month,
+        })
+
     return jsonify({
         "year": year,
         "months": months,
@@ -210,4 +234,5 @@ def monthly_view():
             "pocket_money_total": pocket_total,
             "per_month": distribution_per_month,
         },
+        "payment_accounts": account_summaries,
     })

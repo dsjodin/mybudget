@@ -20,6 +20,7 @@ def create_category():
         sort_order=data.get("sort_order", 0),
         category_type=data["category_type"],
         budget_mode=data.get("budget_mode", "monthly"),
+        payment_account_id=data.get("payment_account_id"),
     )
     db.session.add(category)
     db.session.commit()
@@ -35,6 +36,8 @@ def update_category(id):
     category.sort_order = data.get("sort_order", category.sort_order)
     category.category_type = data.get("category_type", category.category_type)
     category.budget_mode = data.get("budget_mode", category.budget_mode)
+    if "payment_account_id" in data:
+        category.payment_account_id = data["payment_account_id"]
     db.session.commit()
     return jsonify(category.to_dict())
 

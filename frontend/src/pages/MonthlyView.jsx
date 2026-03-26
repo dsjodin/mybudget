@@ -87,6 +87,7 @@ export default function MonthlyView() {
   const remainingData = data.remaining || {}
   const distData = data.distribution || {}
   const distPerMonth = distData.per_month || {}
+  const paymentAccounts = data.payment_accounts || []
 
   const colCount = months.length
 
@@ -428,6 +429,42 @@ export default function MonthlyView() {
               </tr>
             )}
           </tbody>
+
+          {/* ── PAYMENT ACCOUNT SUMMARY ── */}
+          {paymentAccounts.length > 0 && (
+            <tbody>
+              <tr className="bg-teal-50 border-b border-t-2 border-gray-300">
+                <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-teal-800 text-sm uppercase tracking-wide">
+                  Per betalningskonto
+                </td>
+              </tr>
+              {paymentAccounts.map(account => (
+                <tr key={account.id} className="border-b hover:bg-teal-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm font-medium">{account.name}</td>
+                  {months.map(m => (
+                    <td key={m} className="py-1.5 px-2 text-right text-sm">
+                      {formatSEK(account.totals?.[String(m)] || 0)}
+                    </td>
+                  ))}
+                  <td></td>
+                </tr>
+              ))}
+              <tr className="border-b bg-teal-50/50 font-semibold text-sm">
+                <td className="py-1.5 px-3">Ej tilldelat konto</td>
+                {months.map(m => {
+                  const assigned = paymentAccounts.reduce((s, a) => s + (a.totals?.[String(m)] || 0), 0)
+                  const total = grandTotals[String(m)] || 0
+                  const unassigned = total - assigned
+                  return (
+                    <td key={m} className="py-1.5 px-2 text-right text-sm text-gray-400">
+                      {unassigned !== 0 ? formatSEK(unassigned) : '-'}
+                    </td>
+                  )
+                })}
+                <td></td>
+              </tr>
+            </tbody>
+          )}
         </table>
       </div>
 

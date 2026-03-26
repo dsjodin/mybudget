@@ -26,6 +26,7 @@ def create_app():
     from api.dashboard import bp as dashboard_bp
     from api.monthly_view import bp as monthly_view_bp
     from api.distribution import bp as distribution_bp
+    from api.payment_accounts import bp as payment_accounts_bp
 
     app.register_blueprint(categories_bp)
     app.register_blueprint(budget_bp)
@@ -37,6 +38,7 @@ def create_app():
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(monthly_view_bp)
     app.register_blueprint(distribution_bp)
+    app.register_blueprint(payment_accounts_bp)
 
     @app.route("/api/health")
     def health():
