@@ -12,7 +12,7 @@ export default function Settings() {
   const [editingAccount, setEditingAccount] = useState(null)
   const [form, setForm] = useState({
     name: '', parent_id: '', category_type: 'expense', budget_mode: 'monthly',
-    sort_order: 0, payment_account_id: '',
+    sort_order: 0, payment_account_id: '', linked_section: '',
   })
   const [accountForm, setAccountForm] = useState({ name: '', description: '' })
 
@@ -31,6 +31,7 @@ export default function Settings() {
       parent_id: form.parent_id ? parseInt(form.parent_id) : null,
       sort_order: parseInt(form.sort_order),
       payment_account_id: form.payment_account_id ? parseInt(form.payment_account_id) : null,
+      linked_section: form.linked_section || null,
     }
     if (editing) {
       await api.updateCategory(editing, data)
@@ -59,13 +60,14 @@ export default function Settings() {
       name: cat.name, parent_id: cat.parent_id ? String(cat.parent_id) : '',
       category_type: cat.category_type, budget_mode: cat.budget_mode,
       sort_order: cat.sort_order, payment_account_id: cat.payment_account_id ? String(cat.payment_account_id) : '',
+      linked_section: cat.linked_section || '',
     })
     setEditing(cat.id)
     setShowForm(true)
   }
 
   const openNew = (parentId = null, type = 'expense') => {
-    setForm({ name: '', parent_id: parentId ? String(parentId) : '', category_type: type, budget_mode: 'monthly', sort_order: 0, payment_account_id: '' })
+    setForm({ name: '', parent_id: parentId ? String(parentId) : '', category_type: type, budget_mode: 'monthly', sort_order: 0, payment_account_id: '', linked_section: '' })
     setEditing(null)
     setShowForm(true)
   }
@@ -213,6 +215,17 @@ export default function Settings() {
               <p className="text-xs text-gray-400 mt-1">Vilket konto betalas denna kostnad fran?</p>
             </div>
             <div>
+              <label className="block text-sm font-medium mb-1">Visa under sektion</label>
+              <select value={form.linked_section} onChange={e => setForm({ ...form, linked_section: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2">
+                <option value="">Standard (utgifter)</option>
+                <option value="mortgage">Bolan</option>
+                <option value="cars">Bilar</option>
+                <option value="consumer_loan">Konsumtionslan</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Visa denna kategori under en specifik sektion i manadsvyn istallet for under utgifter.</p>
+            </div>
+            <div>
               <label className="block text-sm font-medium mb-1">Budgettyp</label>
               <select value={form.budget_mode} onChange={e => setForm({ ...form, budget_mode: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2">
@@ -261,11 +274,18 @@ export default function Settings() {
   )
 }
 
+const SECTION_LABELS = { cars: 'Bilar', mortgage: 'Bolan', consumer_loan: 'Konsumtionslan' }
+
 function CategoryRows({ cat, children, getAccountName, openEdit, openNew, handleDelete, type }) {
   return (
     <>
       <tr className="border-b bg-gray-50/50 font-medium">
-        <td className="py-2 px-3">{cat.name}</td>
+        <td className="py-2 px-3">
+          {cat.name}
+          {cat.linked_section && (
+            <span className="ml-2 bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs">{SECTION_LABELS[cat.linked_section]}</span>
+          )}
+        </td>
         <td className="py-2 px-3 text-gray-500 text-xs">
           {cat.payment_account_id ? (
             <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{getAccountName(cat.payment_account_id)}</span>
@@ -283,7 +303,12 @@ function CategoryRows({ cat, children, getAccountName, openEdit, openNew, handle
       </tr>
       {children.map(child => (
         <tr key={child.id} className="border-b hover:bg-gray-50">
-          <td className="py-2 px-3 pl-8 text-gray-700">{child.name}</td>
+          <td className="py-2 px-3 pl-8 text-gray-700">
+            {child.name}
+            {child.linked_section && (
+              <span className="ml-2 bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs">{SECTION_LABELS[child.linked_section]}</span>
+            )}
+          </td>
           <td className="py-2 px-3 text-gray-500 text-xs">
             {child.payment_account_id ? (
               <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{getAccountName(child.payment_account_id)}</span>

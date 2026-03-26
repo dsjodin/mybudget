@@ -83,6 +83,7 @@ export default function MonthlyView() {
   const carLoans = data.loans?.car_loans || []
   const consumerLoans = data.loans?.consumer_loans || []
   const leasingItems = data.leasing?.items || []
+  const linkedCategories = data.linked_categories || {}
   const grandTotals = data.grand_totals || {}
   const remainingData = data.remaining || {}
   const distData = data.distribution || {}
@@ -225,20 +226,22 @@ export default function MonthlyView() {
           </tbody>
 
           {/* ── MORTGAGES ── */}
-          {mortgages.length > 0 && (
+          {(mortgages.length > 0 || (linkedCategories.mortgage || []).length > 0) && (
             <tbody>
               <tr className="bg-yellow-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-yellow-800 text-sm uppercase tracking-wide">
                   Bolan
                 </td>
               </tr>
-              <tr className="border-b bg-yellow-50/30 text-xs text-gray-500">
-                <td className="py-1 px-3 pl-6">Lan</td>
-                {months.map(m => (
-                  <td key={m} className="py-1 px-2 text-right">Ranta</td>
-                ))}
-                <td></td>
-              </tr>
+              {mortgages.length > 0 && (
+                <tr className="border-b bg-yellow-50/30 text-xs text-gray-500">
+                  <td className="py-1 px-3 pl-6">Lan</td>
+                  {months.map(m => (
+                    <td key={m} className="py-1 px-2 text-right">Ranta</td>
+                  ))}
+                  <td></td>
+                </tr>
+              )}
               {mortgages.map(loan => (
                 <tr key={loan.id} className="border-b hover:bg-yellow-50/30">
                   <td className="py-1.5 px-3 pl-6 text-sm">
@@ -257,18 +260,31 @@ export default function MonthlyView() {
                   <td></td>
                 </tr>
               )}
+              {(linkedCategories.mortgage || []).map(item => (
+                <tr key={`linked-${item.id}`} className="border-b hover:bg-yellow-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">{item.name}</td>
+                  <MonthAmounts amounts={item.amounts} categoryId={item.id} />
+                  <td></td>
+                </tr>
+              ))}
               <tr className="bg-yellow-50/50 border-b font-semibold text-sm">
                 <td className="py-1.5 px-3">Summa bolan</td>
-                <FixedMonthValue value={
-                  mortgages.reduce((s, l) => s + l.interest + l.amortization, 0)
-                } />
+                {months.map(m => {
+                  const loanCost = mortgages.reduce((s, l) => s + l.interest + l.amortization, 0)
+                  const linkedCost = (linkedCategories.mortgage || []).reduce((s, c) => s + (c.amounts?.[String(m)] || 0), 0)
+                  return (
+                    <td key={m} className="py-1.5 px-2 text-right text-sm font-semibold">
+                      {formatSEK(loanCost + linkedCost)}
+                    </td>
+                  )
+                })}
                 <td></td>
               </tr>
             </tbody>
           )}
 
           {/* ── CAR LOANS ── */}
-          {(carLoans.length > 0 || leasingItems.length > 0) && (
+          {(carLoans.length > 0 || leasingItems.length > 0 || (linkedCategories.cars || []).length > 0) && (
             <tbody>
               <tr className="bg-purple-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-purple-800 text-sm uppercase tracking-wide">
@@ -295,19 +311,32 @@ export default function MonthlyView() {
                   <td></td>
                 </tr>
               ))}
+              {(linkedCategories.cars || []).map(item => (
+                <tr key={`linked-${item.id}`} className="border-b hover:bg-purple-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">{item.name}</td>
+                  <MonthAmounts amounts={item.amounts} categoryId={item.id} />
+                  <td></td>
+                </tr>
+              ))}
               <tr className="bg-purple-50/50 border-b font-semibold text-sm">
                 <td className="py-1.5 px-3">Summa bilar</td>
-                <FixedMonthValue value={
-                  carLoans.reduce((s, l) => s + l.interest + l.amortization, 0) +
-                  (data.leasing?.total_cost || 0)
-                } />
+                {months.map(m => {
+                  const loanCost = carLoans.reduce((s, l) => s + l.interest + l.amortization, 0)
+                  const leasingCost = data.leasing?.total_cost || 0
+                  const linkedCost = (linkedCategories.cars || []).reduce((s, c) => s + (c.amounts?.[String(m)] || 0), 0)
+                  return (
+                    <td key={m} className="py-1.5 px-2 text-right text-sm font-semibold">
+                      {formatSEK(loanCost + leasingCost + linkedCost)}
+                    </td>
+                  )
+                })}
                 <td></td>
               </tr>
             </tbody>
           )}
 
           {/* ── CONSUMER LOANS ── */}
-          {consumerLoans.length > 0 && (
+          {(consumerLoans.length > 0 || (linkedCategories.consumer_loan || []).length > 0) && (
             <tbody>
               <tr className="bg-orange-50 border-b">
                 <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-orange-800 text-sm uppercase tracking-wide">
@@ -324,9 +353,24 @@ export default function MonthlyView() {
                   <td></td>
                 </tr>
               ))}
+              {(linkedCategories.consumer_loan || []).map(item => (
+                <tr key={`linked-${item.id}`} className="border-b hover:bg-orange-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">{item.name}</td>
+                  <MonthAmounts amounts={item.amounts} categoryId={item.id} />
+                  <td></td>
+                </tr>
+              ))}
               <tr className="bg-orange-50/50 border-b font-semibold text-sm">
                 <td className="py-1.5 px-3">Summa konsumtionslan</td>
-                <FixedMonthValue value={consumerLoans.reduce((s, l) => s + l.interest + l.amortization, 0)} />
+                {months.map(m => {
+                  const loanCost = consumerLoans.reduce((s, l) => s + l.interest + l.amortization, 0)
+                  const linkedCost = (linkedCategories.consumer_loan || []).reduce((s, c) => s + (c.amounts?.[String(m)] || 0), 0)
+                  return (
+                    <td key={m} className="py-1.5 px-2 text-right text-sm font-semibold">
+                      {formatSEK(loanCost + linkedCost)}
+                    </td>
+                  )
+                })}
                 <td></td>
               </tr>
             </tbody>

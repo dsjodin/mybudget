@@ -21,6 +21,7 @@ def create_category():
         category_type=data["category_type"],
         budget_mode=data.get("budget_mode", "monthly"),
         payment_account_id=data.get("payment_account_id"),
+        linked_section=data.get("linked_section"),
     )
     db.session.add(category)
     db.session.commit()
@@ -38,6 +39,8 @@ def update_category(id):
     category.budget_mode = data.get("budget_mode", category.budget_mode)
     if "payment_account_id" in data:
         category.payment_account_id = data["payment_account_id"]
+    if "linked_section" in data:
+        category.linked_section = data["linked_section"]
     db.session.commit()
     return jsonify(category.to_dict())
 

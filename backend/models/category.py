@@ -16,6 +16,7 @@ class Category(db.Model):
     payment_account_id = db.Column(
         db.Integer, db.ForeignKey("payment_accounts.id", ondelete="SET NULL"), nullable=True
     )
+    linked_section = db.Column(db.String(20), nullable=True)  # cars, mortgage, consumer_loan
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,
@@ -38,4 +39,5 @@ class Category(db.Model):
             "budget_mode": self.budget_mode,
             "payment_account_id": self.payment_account_id,
             "payment_account_name": self.payment_account.name if self.payment_account else None,
+            "linked_section": self.linked_section,
         }

@@ -46,13 +46,17 @@ def monthly_view():
     for m in months:
         month_actuals[m] = get_month_data(year, m, categories, top_level, children_map)
 
-    # Build category sections
+    # Build category sections (exclude categories with linked_section)
+    linked_cat_ids = {c.id for c in categories if c.linked_section}
+
     def build_sections(cat_type):
         sections = []
         for parent in top_level:
             if parent.category_type != cat_type:
                 continue
-            children = children_map.get(parent.id, [])
+            if parent.id in linked_cat_ids:
+                continue
+            children = [c for c in children_map.get(parent.id, []) if c.id not in linked_cat_ids]
             if children:
                 items = []
                 for child in children:
@@ -94,6 +98,24 @@ def monthly_view():
 
     income_sections = build_sections("income")
     expense_sections = build_sections("expense")
+
+    # Build linked category items per section (cars, mortgage, consumer_loan)
+    linked_items = {}  # section -> list of {id, name, amounts}
+    linked_totals = {}  # section -> {month_str: total}
+    for c in categories:
+        if c.linked_section:
+            amounts = {}
+            for m in months:
+                amounts[str(m)] = month_actuals[m].get(c.id, 0)
+            linked_items.setdefault(c.linked_section, []).append({
+                "id": c.id,
+                "name": c.name,
+                "amounts": amounts,
+            })
+            for m in months:
+                ms = str(m)
+                linked_totals.setdefault(c.linked_section, {})
+                linked_totals[c.linked_section][ms] = linked_totals[c.linked_section].get(ms, 0) + amounts[ms]
 
     # Totals per month
     income_totals = {}
@@ -144,9 +166,12 @@ def monthly_view():
     # Grand totals & remaining per month
     grand_totals = {}
     remaining = {}
+    total_linked = {}
     for m in months:
         ms = str(m)
-        gt = expense_totals[ms] + fixed_monthly
+        linked_sum = sum(section_totals.get(ms, 0) for section_totals in linked_totals.values())
+        total_linked[ms] = round(linked_sum, 2)
+        gt = expense_totals[ms] + fixed_monthly + linked_sum
         grand_totals[ms] = round(gt, 2)
         remaining[ms] = round(income_totals[ms] - gt, 2)
 
@@ -237,6 +262,7 @@ def monthly_view():
             "items": [c.to_dict() for c in leasing],
             "total_cost": round(leasing_total, 2),
         },
+        "linked_categories": linked_items,
         "fixed_monthly": fixed_monthly,
         "grand_totals": grand_totals,
         "remaining": remaining,
