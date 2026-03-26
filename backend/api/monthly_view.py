@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from extensions import db
 from models.category import Category
-from models.budget_item import BudgetItem
 from models.transaction import Transaction
 from models.loan import Loan
 from models.leasing import LeasingContract
@@ -13,28 +12,8 @@ from datetime import date
 bp = Blueprint("monthly_view", __name__, url_prefix="/api/monthly-view")
 
 
-@bp.route("", methods=["GET"])
-def monthly_view():
-    year = request.args.get("year", type=int) or date.today().year
-    month = request.args.get("month", type=int) or date.today().month
-
-    # Load all data
-    categories = Category.query.order_by(Category.sort_order).all()
-    cat_map = {c.id: c for c in categories}
-
-    # Budget items for this month
-    budget_items = BudgetItem.query.filter(
-        BudgetItem.year == year,
-        ((BudgetItem.month == month) | (BudgetItem.month.is_(None)))
-    ).all()
-    budget_map = {}
-    for bi in budget_items:
-        amount = float(bi.amount)
-        if bi.month is None:
-            amount = amount / 12
-        budget_map[bi.category_id] = round(amount, 2)
-
-    # Actual transactions for this month
+def get_month_data(year, month, categories, top_level, children_map):
+    """Get transaction totals for a single month."""
     actuals = db.session.query(
         Transaction.category_id,
         func.sum(Transaction.amount).label("total")
@@ -42,146 +21,179 @@ def monthly_view():
         extract("year", Transaction.date) == year,
         extract("month", Transaction.date) == month,
     ).group_by(Transaction.category_id).all()
-    actual_map = {a.category_id: float(a.total) for a in actuals}
+    return {a.category_id: round(float(a.total), 2) for a in actuals}
 
-    # Build category hierarchy
+
+@bp.route("", methods=["GET"])
+def monthly_view():
+    """Multi-month view. Pass months as comma-separated: ?months=1,2,3&year=2026"""
+    year = request.args.get("year", type=int) or date.today().year
+    months_param = request.args.get("months", str(date.today().month))
+    months = [int(m) for m in months_param.split(",") if m.strip()]
+
+    # Load categories
+    categories = Category.query.order_by(Category.sort_order).all()
+
     top_level = [c for c in categories if c.parent_id is None]
     children_map = {}
     for c in categories:
         if c.parent_id:
             children_map.setdefault(c.parent_id, []).append(c)
 
-    def build_category_section(cat_type):
-        """Build sections grouped by top-level categories."""
+    # Get actuals per month
+    month_actuals = {}
+    for m in months:
+        month_actuals[m] = get_month_data(year, m, categories, top_level, children_map)
+
+    # Build category sections
+    def build_sections(cat_type):
         sections = []
         for parent in top_level:
             if parent.category_type != cat_type:
                 continue
             children = children_map.get(parent.id, [])
             if children:
-                # Parent with children - show children as rows
                 items = []
-                section_budget = 0
-                section_actual = 0
                 for child in children:
-                    b = budget_map.get(child.id, 0)
-                    a = actual_map.get(child.id, 0)
-                    section_budget += b
-                    section_actual += a
+                    amounts = {}
+                    for m in months:
+                        amounts[str(m)] = month_actuals[m].get(child.id, 0)
                     items.append({
                         "id": child.id,
                         "name": child.name,
-                        "budget": round(b, 2),
-                        "actual": round(a, 2),
+                        "amounts": amounts,
                     })
-                # Also include parent's own budget/actual if any
-                pb = budget_map.get(parent.id, 0)
-                pa = actual_map.get(parent.id, 0)
-                section_budget += pb
-                section_actual += pa
+                # Section subtotals per month
+                subtotals = {}
+                for m in months:
+                    subtotals[str(m)] = sum(
+                        month_actuals[m].get(child.id, 0) for child in children
+                    ) + month_actuals[m].get(parent.id, 0)
                 sections.append({
                     "id": parent.id,
                     "name": parent.name,
                     "items": items,
-                    "subtotal_budget": round(section_budget, 2),
-                    "subtotal_actual": round(section_actual, 2),
+                    "subtotals": subtotals,
                 })
             else:
-                # Standalone category (no children)
-                b = budget_map.get(parent.id, 0)
-                a = actual_map.get(parent.id, 0)
+                amounts = {}
+                for m in months:
+                    amounts[str(m)] = month_actuals[m].get(parent.id, 0)
                 sections.append({
                     "id": parent.id,
                     "name": parent.name,
                     "items": [{
                         "id": parent.id,
                         "name": parent.name,
-                        "budget": round(b, 2),
-                        "actual": round(a, 2),
+                        "amounts": amounts,
                     }],
-                    "subtotal_budget": round(b, 2),
-                    "subtotal_actual": round(a, 2),
+                    "subtotals": amounts,
                 })
         return sections
 
-    income_sections = build_category_section("income")
-    expense_sections = build_category_section("expense")
+    income_sections = build_sections("income")
+    expense_sections = build_sections("expense")
 
-    total_income_budget = sum(s["subtotal_budget"] for s in income_sections)
-    total_income_actual = sum(s["subtotal_actual"] for s in income_sections)
-    total_expense_budget = sum(s["subtotal_budget"] for s in expense_sections)
-    total_expense_actual = sum(s["subtotal_actual"] for s in expense_sections)
+    # Totals per month
+    income_totals = {}
+    expense_totals = {}
+    for m in months:
+        ms = str(m)
+        income_totals[ms] = round(sum(s["subtotals"].get(ms, 0) for s in income_sections), 2)
+        expense_totals[ms] = round(sum(s["subtotals"].get(ms, 0) for s in expense_sections), 2)
 
-    # Loans
+    # Loans (same for all months - current snapshot)
     loans = Loan.query.order_by(Loan.name).all()
-    loan_items = []
+    mortgage_items = []
+    car_loan_items = []
+    consumer_loan_items = []
     total_interest = 0
     total_amortization = 0
+
     for loan in loans:
         interest = loan.monthly_interest_cost()
         amort = float(loan.monthly_amortization)
         total_interest += interest
         total_amortization += amort
-        loan_items.append({
+        item = {
             "id": loan.id,
             "name": loan.name,
             "lender": loan.lender,
             "balance": float(loan.current_balance),
             "rate": float(loan.interest_rate),
             "rate_type": loan.rate_type,
+            "loan_type": loan.loan_type,
             "interest": round(interest, 2),
             "amortization": round(amort, 2),
-        })
+        }
+        if loan.loan_type == "mortgage":
+            mortgage_items.append(item)
+        elif loan.loan_type == "car":
+            car_loan_items.append(item)
+        else:
+            consumer_loan_items.append(item)
 
     # Leasing
     leasing = LeasingContract.query.all()
     leasing_total = sum(float(c.monthly_cost) for c in leasing)
 
-    # Grand totals (expenses + loan interest + amortization + leasing)
-    grand_total_budget = total_expense_budget + total_interest + total_amortization + leasing_total
-    grand_total_actual = total_expense_actual + total_interest + total_amortization + leasing_total
+    # Fixed monthly costs (loans + leasing) - same each month
+    fixed_monthly = round(total_interest + total_amortization + leasing_total, 2)
 
-    remaining_budget = total_income_budget - grand_total_budget
-    remaining_actual = total_income_actual - grand_total_actual
+    # Grand totals & remaining per month
+    grand_totals = {}
+    remaining = {}
+    for m in months:
+        ms = str(m)
+        gt = expense_totals[ms] + fixed_monthly
+        grand_totals[ms] = round(gt, 2)
+        remaining[ms] = round(income_totals[ms] - gt, 2)
 
-    # Distribution settings
+    # Distribution
     pocket_per_person = float(AppSetting.get("pocket_money_per_person", 3200))
     pocket_persons = int(AppSetting.get("pocket_money_persons", 2))
     pocket_total = pocket_per_person * pocket_persons
-
-    distributable = remaining_actual - pocket_total
 
     dist_settings = DistributionSetting.query.order_by(
         DistributionSetting.sort_order
     ).all()
 
-    dist_accounts = []
-    for ds in dist_settings:
-        amount = distributable * float(ds.percentage) / 100 if distributable > 0 else 0
-        dist_accounts.append({
-            "id": ds.id,
-            "savings_account_id": ds.savings_account_id,
-            "name": ds.account.name if ds.account else "?",
-            "percentage": float(ds.percentage),
-            "amount": round(amount, 2),
-            "current_balance": float(ds.account.current_balance) if ds.account else 0,
-        })
+    # Distribution per month
+    distribution_per_month = {}
+    for m in months:
+        ms = str(m)
+        distributable = remaining[ms] - pocket_total
+        dist_accounts = []
+        for ds in dist_settings:
+            amount = distributable * float(ds.percentage) / 100 if distributable > 0 else 0
+            dist_accounts.append({
+                "id": ds.id,
+                "savings_account_id": ds.savings_account_id,
+                "name": ds.account.name if ds.account else "?",
+                "percentage": float(ds.percentage),
+                "amount": round(amount, 2),
+                "current_balance": float(ds.account.current_balance) if ds.account else 0,
+            })
+        distribution_per_month[ms] = {
+            "distributable": round(max(distributable, 0), 2),
+            "accounts": dist_accounts,
+        }
 
     return jsonify({
         "year": year,
-        "month": month,
+        "months": months,
         "income": {
             "sections": income_sections,
-            "total_budget": round(total_income_budget, 2),
-            "total_actual": round(total_income_actual, 2),
+            "totals": income_totals,
         },
         "expenses": {
             "sections": expense_sections,
-            "total_budget": round(total_expense_budget, 2),
-            "total_actual": round(total_expense_actual, 2),
+            "totals": expense_totals,
         },
         "loans": {
-            "items": loan_items,
+            "mortgages": mortgage_items,
+            "car_loans": car_loan_items,
+            "consumer_loans": consumer_loan_items,
             "total_interest": round(total_interest, 2),
             "total_amortization": round(total_amortization, 2),
         },
@@ -189,19 +201,13 @@ def monthly_view():
             "items": [c.to_dict() for c in leasing],
             "total_cost": round(leasing_total, 2),
         },
-        "grand_total": {
-            "budget": round(grand_total_budget, 2),
-            "actual": round(grand_total_actual, 2),
-        },
-        "remaining": {
-            "budget": round(remaining_budget, 2),
-            "actual": round(remaining_actual, 2),
-        },
+        "fixed_monthly": fixed_monthly,
+        "grand_totals": grand_totals,
+        "remaining": remaining,
         "distribution": {
             "pocket_money_per_person": pocket_per_person,
             "pocket_money_persons": pocket_persons,
             "pocket_money_total": pocket_total,
-            "distributable": round(max(distributable, 0), 2),
-            "accounts": dist_accounts,
+            "per_month": distribution_per_month,
         },
     })

@@ -9,7 +9,11 @@ bp = Blueprint("loans", __name__, url_prefix="/api/loans")
 
 @bp.route("", methods=["GET"])
 def list_loans():
-    loans = Loan.query.order_by(Loan.name).all()
+    loan_type = request.args.get("type")
+    query = Loan.query
+    if loan_type:
+        query = query.filter_by(loan_type=loan_type)
+    loans = query.order_by(Loan.name).all()
     return jsonify([loan.to_dict() for loan in loans])
 
 
@@ -27,6 +31,7 @@ def create_loan():
         start_date=data["start_date"],
         end_date=data.get("end_date"),
         monthly_amortization=data.get("monthly_amortization", 0),
+        loan_type=data.get("loan_type", "mortgage"),
         category_id=data.get("category_id"),
     )
     db.session.add(loan)
@@ -54,6 +59,7 @@ def update_loan(id):
     loan.rate_fixed_until = data.get("rate_fixed_until", loan.rate_fixed_until)
     loan.end_date = data.get("end_date", loan.end_date)
     loan.monthly_amortization = data.get("monthly_amortization", loan.monthly_amortization)
+    loan.loan_type = data.get("loan_type", loan.loan_type)
     loan.category_id = data.get("category_id", loan.category_id)
     db.session.commit()
     return jsonify(loan.to_dict())

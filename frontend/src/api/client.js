@@ -38,7 +38,7 @@ export const api = {
   deleteTransaction: (id) => request(`/transactions/${id}`, { method: 'DELETE' }),
 
   // Loans
-  getLoans: () => request('/loans'),
+  getLoans: (type) => request(`/loans${type ? `?type=${type}` : ''}`),
   createLoan: (data) => request('/loans', { method: 'POST', body: JSON.stringify(data) }),
   updateLoan: (id, data) => request(`/loans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLoan: (id) => request(`/loans/${id}`, { method: 'DELETE' }),
@@ -62,7 +62,7 @@ export const api = {
   setSavingsBalance: (id, data) => request(`/savings/${id}/set-balance`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Monthly View
-  getMonthlyView: (year, month) => request(`/monthly-view?year=${year}&month=${month}`),
+  getMonthlyView: (year, months) => request(`/monthly-view?year=${year}&months=${months}`),
   getDistributionSettings: () => request('/distribution-settings'),
   updateDistributionSettings: (data) => request('/distribution-settings', { method: 'PUT', body: JSON.stringify(data) }),
 

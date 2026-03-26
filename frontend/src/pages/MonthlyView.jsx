@@ -1,80 +1,61 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api/client'
-import MonthPicker from '../components/MonthPicker'
 import Modal from '../components/Modal'
 import { formatSEK, formatPercent, currentYear, currentMonth, MONTHS_SHORT } from '../utils/format'
 
 export default function MonthlyView() {
   const [year, setYear] = useState(currentYear())
-  const [month, setMonth] = useState(currentMonth())
+  const [months, setMonths] = useState(() => {
+    const m = currentMonth()
+    return m >= 3 ? [m - 2, m - 1, m] : m === 2 ? [1, 2] : [1]
+  })
   const [data, setData] = useState(null)
-  const [distSettings, setDistSettings] = useState(null)
-  const [editingCell, setEditingCell] = useState(null) // { categoryId, field: 'budget'|'actual' }
+  const [editingCell, setEditingCell] = useState(null) // { categoryId, month }
   const [editValue, setEditValue] = useState('')
   const [showDistModal, setShowDistModal] = useState(false)
-  const [showCopyModal, setShowCopyModal] = useState(false)
-  const [copyTarget, setCopyTarget] = useState({ year: currentYear(), month: currentMonth() + 1 })
+  const [distSettings, setDistSettings] = useState(null)
 
   const loadData = useCallback(() => {
-    api.getMonthlyView(year, month).then(setData)
-  }, [year, month])
+    api.getMonthlyView(year, months.join(',')).then(setData)
+  }, [year, months])
 
   useEffect(() => {
     loadData()
     api.getDistributionSettings().then(setDistSettings)
   }, [loadData])
 
-  const handleCellClick = (categoryId, field, currentValue) => {
-    setEditingCell({ categoryId, field })
+  const handleCellClick = (categoryId, month, currentValue) => {
+    setEditingCell({ categoryId, month })
     setEditValue(currentValue ? String(currentValue) : '')
   }
 
   const handleCellSave = async () => {
     if (!editingCell) return
-    const { categoryId, field } = editingCell
+    const { categoryId, month } = editingCell
     const value = parseFloat(editValue) || 0
 
-    if (field === 'budget') {
-      await api.saveBudgetItem({
+    // Find existing transaction for this category+month or create new
+    const transactions = await api.getTransactions(year, month)
+    const existing = transactions.find(t => t.category_id === categoryId)
+    if (existing) {
+      await api.updateTransaction(existing.id, {
         category_id: categoryId,
-        year,
-        month,
+        date: existing.date,
         amount: value,
+        description: existing.description,
       })
-    } else if (field === 'actual') {
-      // Get existing transactions for this category+month to update or create
-      const transactions = await api.getTransactions(year, month)
-      const existing = transactions.find(t => t.category_id === categoryId)
-      if (existing) {
-        await api.updateTransaction(existing.id, {
-          category_id: categoryId,
-          date: existing.date,
-          amount: value,
-          description: existing.description,
-        })
-      } else {
-        const dateStr = `${year}-${String(month).padStart(2, '0')}-01`
-        await api.createTransaction({
-          category_id: categoryId,
-          date: dateStr,
-          amount: value,
-          description: '',
-        })
-      }
+    } else {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-01`
+      await api.createTransaction({
+        category_id: categoryId,
+        date: dateStr,
+        amount: value,
+        description: '',
+      })
     }
 
     setEditingCell(null)
     loadData()
-  }
-
-  const handleCopy = async () => {
-    await api.copyMonth({
-      source_year: year,
-      source_month: month,
-      target_year: copyTarget.year,
-      target_month: copyTarget.month,
-    })
-    setShowCopyModal(false)
   }
 
   const handleKeyDown = (e) => {
@@ -82,10 +63,21 @@ export default function MonthlyView() {
     if (e.key === 'Escape') setEditingCell(null)
   }
 
+  const addMonth = () => {
+    const last = months[months.length - 1]
+    if (last < 12) setMonths([...months, last + 1])
+  }
+
+  const removeMonth = (m) => {
+    if (months.length > 1) setMonths(months.filter(x => x !== m))
+  }
+
   if (!data) return <div className="text-center py-12 text-gray-500">Laddar...</div>
 
-  const EditableCell = ({ categoryId, field, value, className = '' }) => {
-    const isEditing = editingCell?.categoryId === categoryId && editingCell?.field === field
+  const colCount = months.length
+
+  const EditableCell = ({ categoryId, month, value }) => {
+    const isEditing = editingCell?.categoryId === categoryId && editingCell?.month === month
     if (isEditing) {
       return (
         <input
@@ -94,45 +86,66 @@ export default function MonthlyView() {
           onChange={e => setEditValue(e.target.value)}
           onBlur={handleCellSave}
           onKeyDown={handleKeyDown}
-          className="w-28 text-right border-2 border-blue-400 rounded px-2 py-0.5 text-sm bg-blue-50 focus:outline-none"
+          className="w-24 text-right border-2 border-blue-400 rounded px-1.5 py-0.5 text-sm bg-blue-50 focus:outline-none"
           autoFocus
         />
       )
     }
+    const displayVal = value || 0
     return (
       <span
-        className={`cursor-pointer hover:bg-blue-100 px-2 py-0.5 rounded transition-colors ${className}`}
-        onClick={() => handleCellClick(categoryId, field, value)}
-        title="Klicka för att ändra"
+        className={`cursor-pointer hover:bg-blue-100 px-1.5 py-0.5 rounded transition-colors text-sm ${displayVal === 0 ? 'text-gray-300' : ''}`}
+        onClick={() => handleCellClick(categoryId, month, value)}
+        title="Klicka for att andra"
       >
-        {formatSEK(value)}
+        {displayVal === 0 ? '-' : formatSEK(displayVal)}
       </span>
     )
   }
 
-  // Calculate totals including loans/leasing for grand total
-  const loanCosts = data.loans.total_interest + data.loans.total_amortization
-  const leasingCost = data.leasing.total_cost
+  const MonthAmounts = ({ amounts, categoryId, editable = true }) => (
+    months.map(m => (
+      <td key={m} className="py-1.5 px-2 text-right">
+        {editable ? (
+          <EditableCell categoryId={categoryId} month={m} value={amounts?.[String(m)] || 0} />
+        ) : (
+          <span className="text-sm">{formatSEK(amounts?.[String(m)] || 0)}</span>
+        )}
+      </td>
+    ))
+  )
+
+  const StaticMonthValues = ({ values }) => (
+    months.map(m => (
+      <td key={m} className="py-1.5 px-2 text-right text-sm font-semibold">
+        {formatSEK(values?.[String(m)] || values || 0)}
+      </td>
+    ))
+  )
+
+  const FixedMonthValue = ({ value }) => (
+    months.map(m => (
+      <td key={m} className="py-1.5 px-2 text-right text-sm">
+        {formatSEK(value)}
+      </td>
+    ))
+  )
 
   return (
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Månadsvy</h1>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowCopyModal(true)}
-            className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
-          >
-            Kopiera budget
+        <h1 className="text-2xl font-bold text-gray-900">Manadsvy {year}</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowDistModal(true)}
+            className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
+            Fordelning
           </button>
-          <button
-            onClick={() => setShowDistModal(true)}
-            className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
-          >
-            Fördelning
-          </button>
-          <MonthPicker year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m) }} />
+          <button onClick={() => setYear(year - 1)}
+            className="px-2 py-1.5 text-sm text-gray-500 hover:text-gray-900">&laquo;</button>
+          <span className="font-medium">{year}</span>
+          <button onClick={() => setYear(year + 1)}
+            className="px-2 py-1.5 text-sm text-gray-500 hover:text-gray-900">&raquo;</button>
         </div>
       </div>
 
@@ -140,18 +153,32 @@ export default function MonthlyView() {
       <div className="bg-white rounded-xl border overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b bg-gray-50 text-left text-sm text-gray-600">
-              <th className="py-3 px-4 w-1/2">Post</th>
-              <th className="py-3 px-3 text-right">Budget</th>
-              <th className="py-3 px-3 text-right">Verklig</th>
-              <th className="py-3 px-3 text-right">Differens</th>
+            <tr className="border-b bg-gray-50 text-sm text-gray-600">
+              <th className="py-3 px-3 text-left min-w-[200px]">Post</th>
+              {months.map(m => (
+                <th key={m} className="py-3 px-2 text-right min-w-[100px]">
+                  <div className="flex items-center justify-end gap-1">
+                    {months.length > 1 && (
+                      <button onClick={() => removeMonth(m)}
+                        className="text-gray-300 hover:text-red-500 text-xs" title="Ta bort manad">x</button>
+                    )}
+                    <span>{MONTHS_SHORT[m - 1]}</span>
+                  </div>
+                </th>
+              ))}
+              <th className="py-3 px-2 w-10">
+                {months[months.length - 1] < 12 && (
+                  <button onClick={addMonth}
+                    className="text-blue-500 hover:text-blue-700 text-sm font-bold" title="Lagg till manad">+</button>
+                )}
+              </th>
             </tr>
           </thead>
 
           {/* ── INCOME ── */}
           <tbody>
             <tr className="bg-green-50 border-b">
-              <td colSpan={4} className="py-2 px-4 font-bold text-green-800 text-sm uppercase tracking-wide">
+              <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-green-800 text-sm uppercase tracking-wide">
                 Inkomster
               </td>
             </tr>
@@ -159,202 +186,230 @@ export default function MonthlyView() {
           {data.income.sections.map(section => (
             <tbody key={section.id}>
               {section.items.length > 1 && (
-                <tr className="bg-green-50/50 border-b">
-                  <td className="py-1.5 px-4 font-semibold text-sm text-green-700">{section.name}</td>
-                  <td className="py-1.5 px-3 text-right text-sm font-semibold">{formatSEK(section.subtotal_budget)}</td>
-                  <td className="py-1.5 px-3 text-right text-sm font-semibold">{formatSEK(section.subtotal_actual)}</td>
-                  <td className="py-1.5 px-3 text-right text-sm font-semibold">{formatSEK(section.subtotal_budget - section.subtotal_actual)}</td>
+                <tr className="bg-green-50/40 border-b">
+                  <td className="py-1.5 px-3 font-semibold text-sm text-green-700">{section.name}</td>
+                  <StaticMonthValues values={section.subtotals} />
+                  <td></td>
                 </tr>
               )}
               {section.items.map(item => (
                 <tr key={item.id} className="border-b hover:bg-green-50/30">
-                  <td className="py-1.5 px-4 pl-8 text-sm">{item.name}</td>
-                  <td className="py-1.5 px-3 text-right text-sm">
-                    <EditableCell categoryId={item.id} field="budget" value={item.budget} />
-                  </td>
-                  <td className="py-1.5 px-3 text-right text-sm">
-                    <EditableCell categoryId={item.id} field="actual" value={item.actual} />
-                  </td>
-                  <td className={`py-1.5 px-3 text-right text-sm ${item.budget - item.actual < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatSEK(item.budget - item.actual)}
-                  </td>
+                  <td className="py-1.5 px-3 pl-6 text-sm">{item.name}</td>
+                  <MonthAmounts amounts={item.amounts} categoryId={item.id} />
+                  <td></td>
                 </tr>
               ))}
             </tbody>
           ))}
           <tbody>
             <tr className="bg-green-100 border-b font-bold">
-              <td className="py-2 px-4">Summa inkomster</td>
-              <td className="py-2 px-3 text-right">{formatSEK(data.income.total_budget)}</td>
-              <td className="py-2 px-3 text-right">{formatSEK(data.income.total_actual)}</td>
-              <td className={`py-2 px-3 text-right ${data.income.total_actual - data.income.total_budget >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                {formatSEK(data.income.total_budget - data.income.total_actual)}
-              </td>
+              <td className="py-2 px-3">Summa inkomster</td>
+              <StaticMonthValues values={data.income.totals} />
+              <td></td>
             </tr>
           </tbody>
 
-          {/* ── LOANS ── */}
-          <tbody>
-            <tr className="bg-yellow-50 border-b">
-              <td colSpan={4} className="py-2 px-4 font-bold text-yellow-800 text-sm uppercase tracking-wide">
-                Lån & Ränta
-              </td>
-            </tr>
-          </tbody>
-          <tbody>
-            <tr className="border-b bg-yellow-50/30 text-xs text-gray-500">
-              <td className="py-1 px-4 pl-8">Lån</td>
-              <td className="py-1 px-3 text-right">Ränta</td>
-              <td className="py-1 px-3 text-right">Skuld</td>
-              <td className="py-1 px-3 text-right">Räntesats</td>
-            </tr>
-            {data.loans.items.map(loan => (
-              <tr key={loan.id} className="border-b hover:bg-yellow-50/30">
-                <td className="py-1.5 px-4 pl-8 text-sm">
-                  {loan.name}
-                  {loan.lender && <span className="text-gray-400 ml-1 text-xs">({loan.lender})</span>}
+          {/* ── MORTGAGES ── */}
+          {data.loans.mortgages.length > 0 && (
+            <tbody>
+              <tr className="bg-yellow-50 border-b">
+                <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-yellow-800 text-sm uppercase tracking-wide">
+                  Bolan
                 </td>
-                <td className="py-1.5 px-3 text-right text-sm">{formatSEK(loan.interest)}</td>
-                <td className="py-1.5 px-3 text-right text-sm text-gray-500">{formatSEK(loan.balance)}</td>
-                <td className="py-1.5 px-3 text-right text-sm text-gray-500">{formatPercent(loan.rate)}</td>
               </tr>
-            ))}
-            {data.loans.total_amortization > 0 && (
-              <tr className="border-b hover:bg-yellow-50/30">
-                <td className="py-1.5 px-4 pl-8 text-sm">Amortering</td>
-                <td className="py-1.5 px-3 text-right text-sm">{formatSEK(data.loans.total_amortization)}</td>
-                <td colSpan={2}></td>
+              <tr className="border-b bg-yellow-50/30 text-xs text-gray-500">
+                <td className="py-1 px-3 pl-6">Lan</td>
+                {months.map(m => (
+                  <td key={m} className="py-1 px-2 text-right">Ranta</td>
+                ))}
+                <td></td>
               </tr>
-            )}
-            <tr className="bg-yellow-100 border-b font-bold">
-              <td className="py-2 px-4">Summa lån</td>
-              <td className="py-2 px-3 text-right">{formatSEK(loanCosts)}</td>
-              <td colSpan={2}></td>
-            </tr>
-          </tbody>
+              {data.loans.mortgages.map(loan => (
+                <tr key={loan.id} className="border-b hover:bg-yellow-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">
+                    {loan.name}
+                    {loan.lender && <span className="text-gray-400 ml-1 text-xs">({loan.lender})</span>}
+                    <span className="text-gray-400 ml-1 text-xs">{formatPercent(loan.rate)}</span>
+                  </td>
+                  <FixedMonthValue value={loan.interest} />
+                  <td></td>
+                </tr>
+              ))}
+              {data.loans.mortgages.some(l => l.amortization > 0) && (
+                <tr className="border-b hover:bg-yellow-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">Amortering</td>
+                  <FixedMonthValue value={data.loans.mortgages.reduce((s, l) => s + l.amortization, 0)} />
+                  <td></td>
+                </tr>
+              )}
+              <tr className="bg-yellow-50/50 border-b font-semibold text-sm">
+                <td className="py-1.5 px-3">Summa bolan</td>
+                <FixedMonthValue value={
+                  data.loans.mortgages.reduce((s, l) => s + l.interest + l.amortization, 0)
+                } />
+                <td></td>
+              </tr>
+            </tbody>
+          )}
+
+          {/* ── CAR LOANS ── */}
+          {(data.loans.car_loans.length > 0 || data.leasing.items.length > 0) && (
+            <tbody>
+              <tr className="bg-purple-50 border-b">
+                <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-purple-800 text-sm uppercase tracking-wide">
+                  Bilar
+                </td>
+              </tr>
+              {data.loans.car_loans.map(loan => (
+                <tr key={loan.id} className="border-b hover:bg-purple-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">
+                    {loan.name}
+                    <span className="text-gray-400 ml-1 text-xs">(lan {formatPercent(loan.rate)})</span>
+                  </td>
+                  <FixedMonthValue value={loan.interest + loan.amortization} />
+                  <td></td>
+                </tr>
+              ))}
+              {data.leasing.items.map(item => (
+                <tr key={item.id} className="border-b hover:bg-purple-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">
+                    {item.vehicle_name}
+                    <span className="text-gray-400 ml-1 text-xs">(leasing)</span>
+                  </td>
+                  <FixedMonthValue value={item.monthly_cost} />
+                  <td></td>
+                </tr>
+              ))}
+              <tr className="bg-purple-50/50 border-b font-semibold text-sm">
+                <td className="py-1.5 px-3">Summa bilar</td>
+                <FixedMonthValue value={
+                  data.loans.car_loans.reduce((s, l) => s + l.interest + l.amortization, 0) +
+                  data.leasing.total_cost
+                } />
+                <td></td>
+              </tr>
+            </tbody>
+          )}
+
+          {/* ── CONSUMER LOANS ── */}
+          {data.loans.consumer_loans.length > 0 && (
+            <tbody>
+              <tr className="bg-orange-50 border-b">
+                <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-orange-800 text-sm uppercase tracking-wide">
+                  Konsumtionslan
+                </td>
+              </tr>
+              {data.loans.consumer_loans.map(loan => (
+                <tr key={loan.id} className="border-b hover:bg-orange-50/30">
+                  <td className="py-1.5 px-3 pl-6 text-sm">
+                    {loan.name}
+                    <span className="text-gray-400 ml-1 text-xs">({formatPercent(loan.rate)})</span>
+                  </td>
+                  <FixedMonthValue value={loan.interest + loan.amortization} />
+                  <td></td>
+                </tr>
+              ))}
+              <tr className="bg-orange-50/50 border-b font-semibold text-sm">
+                <td className="py-1.5 px-3">Summa konsumtionslan</td>
+                <FixedMonthValue value={data.loans.consumer_loans.reduce((s, l) => s + l.interest + l.amortization, 0)} />
+                <td></td>
+              </tr>
+            </tbody>
+          )}
 
           {/* ── EXPENSES BY SECTION ── */}
           {data.expenses.sections.map(section => (
             <tbody key={section.id}>
               <tr className="bg-red-50 border-b">
-                <td colSpan={4} className="py-2 px-4 font-bold text-red-800 text-sm uppercase tracking-wide">
+                <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-red-800 text-sm uppercase tracking-wide">
                   {section.name}
                 </td>
               </tr>
               {section.items.map(item => (
                 <tr key={item.id} className="border-b hover:bg-red-50/30">
-                  <td className="py-1.5 px-4 pl-8 text-sm">{item.name}</td>
-                  <td className="py-1.5 px-3 text-right text-sm">
-                    <EditableCell categoryId={item.id} field="budget" value={item.budget} />
-                  </td>
-                  <td className="py-1.5 px-3 text-right text-sm">
-                    <EditableCell categoryId={item.id} field="actual" value={item.actual} />
-                  </td>
-                  <td className={`py-1.5 px-3 text-right text-sm ${item.budget - item.actual < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatSEK(item.budget - item.actual)}
-                  </td>
+                  <td className="py-1.5 px-3 pl-6 text-sm">{item.name}</td>
+                  <MonthAmounts amounts={item.amounts} categoryId={item.id} />
+                  <td></td>
                 </tr>
               ))}
               <tr className="bg-red-50/50 border-b font-semibold text-sm">
-                <td className="py-1.5 px-4">Summa {section.name.toLowerCase()}</td>
-                <td className="py-1.5 px-3 text-right">{formatSEK(section.subtotal_budget)}</td>
-                <td className="py-1.5 px-3 text-right">{formatSEK(section.subtotal_actual)}</td>
-                <td className={`py-1.5 px-3 text-right ${section.subtotal_budget - section.subtotal_actual < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {formatSEK(section.subtotal_budget - section.subtotal_actual)}
-                </td>
+                <td className="py-1.5 px-3">Summa {section.name.toLowerCase()}</td>
+                <StaticMonthValues values={section.subtotals} />
+                <td></td>
               </tr>
             </tbody>
           ))}
 
-          {/* ── LEASING ── */}
-          {data.leasing.items.length > 0 && (
-            <tbody>
-              <tr className="bg-purple-50 border-b">
-                <td colSpan={4} className="py-2 px-4 font-bold text-purple-800 text-sm uppercase tracking-wide">
-                  Leasing
-                </td>
-              </tr>
-              {data.leasing.items.map(item => (
-                <tr key={item.id} className="border-b hover:bg-purple-50/30">
-                  <td className="py-1.5 px-4 pl-8 text-sm">{item.vehicle_name}</td>
-                  <td className="py-1.5 px-3 text-right text-sm">{formatSEK(item.monthly_cost)}</td>
-                  <td className="py-1.5 px-3 text-right text-sm">{formatSEK(item.monthly_cost)}</td>
-                  <td className="py-1.5 px-3 text-right text-sm text-green-600">{formatSEK(0)}</td>
-                </tr>
-              ))}
-              <tr className="bg-purple-50/50 border-b font-semibold text-sm">
-                <td className="py-1.5 px-4">Summa leasing</td>
-                <td className="py-1.5 px-3 text-right">{formatSEK(data.leasing.total_cost)}</td>
-                <td className="py-1.5 px-3 text-right">{formatSEK(data.leasing.total_cost)}</td>
-                <td className="py-1.5 px-3 text-right text-green-600">{formatSEK(0)}</td>
-              </tr>
-            </tbody>
-          )}
-
           {/* ── GRAND TOTAL ── */}
           <tbody>
             <tr className="bg-gray-200 border-b border-gray-400 font-bold text-base">
-              <td className="py-3 px-4">Total kostnad</td>
-              <td className="py-3 px-3 text-right">{formatSEK(data.grand_total.budget)}</td>
-              <td className="py-3 px-3 text-right">{formatSEK(data.grand_total.actual)}</td>
-              <td className={`py-3 px-3 text-right ${data.grand_total.budget - data.grand_total.actual < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {formatSEK(data.grand_total.budget - data.grand_total.actual)}
-              </td>
+              <td className="py-3 px-3">Total kostnad</td>
+              <StaticMonthValues values={data.grand_totals} />
+              <td></td>
             </tr>
           </tbody>
 
           {/* ── REMAINING ── */}
           <tbody>
             <tr className="bg-blue-100 border-b font-bold text-lg">
-              <td className="py-3 px-4 text-blue-900">Kvar</td>
-              <td className="py-3 px-3 text-right text-blue-900">{formatSEK(data.remaining.budget)}</td>
-              <td className={`py-3 px-3 text-right ${data.remaining.actual >= 0 ? 'text-blue-900' : 'text-red-600'}`}>
-                {formatSEK(data.remaining.actual)}
-              </td>
-              <td className="py-3 px-3"></td>
+              <td className="py-3 px-3 text-blue-900">Kvar</td>
+              {months.map(m => {
+                const val = data.remaining[String(m)] || 0
+                return (
+                  <td key={m} className={`py-3 px-2 text-right ${val >= 0 ? 'text-blue-900' : 'text-red-600'}`}>
+                    {formatSEK(val)}
+                  </td>
+                )
+              })}
+              <td></td>
             </tr>
           </tbody>
 
           {/* ── DISTRIBUTION ── */}
           <tbody>
             <tr className="bg-indigo-50 border-b">
-              <td colSpan={4} className="py-2 px-4 font-bold text-indigo-800 text-sm uppercase tracking-wide">
-                Fördelning
+              <td colSpan={colCount + 2} className="py-2 px-3 font-bold text-indigo-800 text-sm uppercase tracking-wide">
+                Fordelning
               </td>
             </tr>
             <tr className="border-b">
-              <td className="py-1.5 px-4 pl-8 text-sm">
+              <td className="py-1.5 px-3 pl-6 text-sm">
                 Fickpengar ({data.distribution.pocket_money_persons} x {formatSEK(data.distribution.pocket_money_per_person)})
               </td>
-              <td className="py-1.5 px-3 text-right text-sm text-red-600">
-                -{formatSEK(data.distribution.pocket_money_total)}
-              </td>
-              <td colSpan={2}></td>
+              <FixedMonthValue value={-data.distribution.pocket_money_total} />
+              <td></td>
             </tr>
             <tr className="border-b font-semibold">
-              <td className="py-1.5 px-4 pl-8 text-sm">Att fördela</td>
-              <td className="py-1.5 px-3 text-right text-sm">{formatSEK(data.distribution.distributable)}</td>
-              <td colSpan={2}></td>
+              <td className="py-1.5 px-3 pl-6 text-sm">Att fordela</td>
+              {months.map(m => (
+                <td key={m} className="py-1.5 px-2 text-right text-sm">
+                  {formatSEK(data.distribution.per_month[String(m)]?.distributable || 0)}
+                </td>
+              ))}
+              <td></td>
             </tr>
-            {data.distribution.accounts.map(acc => (
+            {data.distribution.per_month[String(months[0])]?.accounts?.map(acc => (
               <tr key={acc.id} className="border-b hover:bg-indigo-50/30">
-                <td className="py-1.5 px-4 pl-8 text-sm">
+                <td className="py-1.5 px-3 pl-6 text-sm">
                   {acc.name}
                   <span className="text-gray-400 ml-1 text-xs">({acc.percentage}%)</span>
+                  <span className="text-gray-400 ml-2 text-xs">Saldo: {formatSEK(acc.current_balance)}</span>
                 </td>
-                <td className="py-1.5 px-3 text-right text-sm text-green-600">
-                  +{formatSEK(acc.amount)}
-                </td>
-                <td className="py-1.5 px-3 text-right text-sm" colSpan={2}>
-                  <span className="text-gray-500 text-xs mr-1">Saldo:</span>
-                  <span className="font-medium">{formatSEK(acc.current_balance)}</span>
-                </td>
+                {months.map(m => {
+                  const mAcc = data.distribution.per_month[String(m)]?.accounts?.find(a => a.id === acc.id)
+                  return (
+                    <td key={m} className="py-1.5 px-2 text-right text-sm text-green-600">
+                      +{formatSEK(mAcc?.amount || 0)}
+                    </td>
+                  )
+                })}
+                <td></td>
               </tr>
             ))}
-            {data.distribution.accounts.length === 0 && (
+            {(!data.distribution.per_month[String(months[0])]?.accounts?.length) && (
               <tr className="border-b">
-                <td colSpan={4} className="py-3 px-4 pl-8 text-sm text-gray-400 italic">
-                  Ingen fördelning konfigurerad. Klicka "Fördelning" ovan.
+                <td colSpan={colCount + 2} className="py-3 px-3 pl-6 text-sm text-gray-400 italic">
+                  Ingen fordelning konfigurerad. Klicka "Fordelning" ovan.
                 </td>
               </tr>
             )}
@@ -362,7 +417,9 @@ export default function MonthlyView() {
         </table>
       </div>
 
-      <p className="text-sm text-gray-500 mt-3">Klicka på ett belopp för att ändra det.</p>
+      <p className="text-sm text-gray-500 mt-3">
+        Klicka pa ett belopp for att andra det. Tryck + for att lagga till manader.
+      </p>
 
       {/* ── Distribution Settings Modal ── */}
       {showDistModal && distSettings && (
@@ -377,32 +434,6 @@ export default function MonthlyView() {
           }}
           onClose={() => setShowDistModal(false)}
         />
-      )}
-
-      {/* ── Copy Month Modal ── */}
-      {showCopyModal && (
-        <Modal title="Kopiera budget" onClose={() => setShowCopyModal(false)}>
-          <p className="text-sm text-gray-600 mb-4">
-            Kopiera alla budgetposter från {MONTHS_SHORT[month - 1]} {year} till:
-          </p>
-          <div className="flex gap-3 mb-4">
-            <select value={copyTarget.month} onChange={e => setCopyTarget({ ...copyTarget, month: parseInt(e.target.value) })}
-              className="border rounded px-3 py-2">
-              {MONTHS_SHORT.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-            </select>
-            <input type="number" value={copyTarget.year}
-              onChange={e => setCopyTarget({ ...copyTarget, year: parseInt(e.target.value) })}
-              className="border rounded px-3 py-2 w-24" />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setShowCopyModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-              Avbryt
-            </button>
-            <button onClick={handleCopy} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              Kopiera
-            </button>
-          </div>
-        </Modal>
       )}
     </div>
   )
@@ -459,9 +490,8 @@ function DistributionModal({ settings, onSave, onClose }) {
   }
 
   return (
-    <Modal title="Fördelningsinställningar" onClose={onClose}>
+    <Modal title="Fordelningsinstallningar" onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Pocket money */}
         <div>
           <h3 className="font-semibold text-sm mb-2">Fickpengar</h3>
           <div className="flex gap-3">
@@ -480,9 +510,8 @@ function DistributionModal({ settings, onSave, onClose }) {
           </div>
         </div>
 
-        {/* Distribution accounts */}
         <div>
-          <h3 className="font-semibold text-sm mb-2">Fördelning av resterande belopp</h3>
+          <h3 className="font-semibold text-sm mb-2">Fordelning av resterande belopp</h3>
           {accounts.length === 0 && (
             <p className="text-sm text-gray-400 italic mb-2">Inga konton tillagda.</p>
           )}
@@ -496,31 +525,25 @@ function DistributionModal({ settings, onSave, onClose }) {
                 <span className="text-sm text-gray-500">%</span>
               </div>
               <button type="button" onClick={() => handleRemove(i)}
-                className="text-red-500 hover:text-red-700 text-sm px-1">
-                Ta bort
-              </button>
+                className="text-red-500 hover:text-red-700 text-sm px-1">Ta bort</button>
             </div>
           ))}
 
-          {/* Total indicator */}
           <div className={`text-sm mt-1 ${Math.abs(totalPct - 100) < 0.01 ? 'text-green-600' : 'text-red-600'}`}>
             Totalt: {totalPct}% {Math.abs(totalPct - 100) >= 0.01 && '(ska vara 100%)'}
           </div>
 
-          {/* Add account */}
           {availableAccounts.length > 0 && (
             <div className="flex gap-2 mt-3">
               <select value={addAccountId} onChange={e => setAddAccountId(e.target.value)}
                 className="flex-1 border rounded px-2 py-1.5 text-sm">
-                <option value="">Lägg till konto...</option>
+                <option value="">Lagg till konto...</option>
                 {availableAccounts.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
               <button type="button" onClick={handleAdd}
-                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm">
-                Lägg till
-              </button>
+                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm">Lagg till</button>
             </div>
           )}
         </div>
@@ -529,9 +552,7 @@ function DistributionModal({ settings, onSave, onClose }) {
           <button type="button" onClick={onClose}
             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Avbryt</button>
           <button type="submit"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Spara
-          </button>
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Spara</button>
         </div>
       </form>
     </Modal>

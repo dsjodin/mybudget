@@ -16,6 +16,7 @@ class Loan(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=True)
     monthly_amortization = db.Column(db.Numeric(12, 2), default=0)
+    loan_type = db.Column(db.String(20), nullable=False, default="mortgage")  # mortgage, car, consumer
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=True
     )
@@ -45,6 +46,7 @@ class Loan(db.Model):
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "monthly_amortization": float(self.monthly_amortization),
             "monthly_interest_cost": self.monthly_interest_cost(),
+            "loan_type": self.loan_type,
             "category_id": self.category_id,
         }
 

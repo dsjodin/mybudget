@@ -4,11 +4,10 @@ import { NavLink } from 'react-router-dom'
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: '📊' },
   { path: '/budget', label: 'Månadsvy', icon: '📋' },
+  { path: '/mortgages', label: 'Bolån', icon: '🏠' },
+  { path: '/cars', label: 'Bilar', icon: '🚗' },
   { path: '/transactions', label: 'Transaktioner', icon: '💳' },
-  { path: '/loans', label: 'Lån & Bolån', icon: '🏦' },
-  { path: '/leasing', label: 'Leasing', icon: '🚗' },
   { path: '/savings', label: 'Sparkonton', icon: '💰' },
-  { path: '/scenarios', label: 'Scenarion', icon: '🔮' },
   { path: '/settings', label: 'Inställningar', icon: '⚙️' },
 ]
 

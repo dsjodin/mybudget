@@ -3,10 +3,9 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import MonthlyView from './pages/MonthlyView'
 import Transactions from './pages/Transactions'
-import Loans from './pages/Loans'
-import Leasing from './pages/Leasing'
+import Mortgages from './pages/Mortgages'
+import Cars from './pages/Cars'
 import Savings from './pages/Savings'
-import Scenarios from './pages/Scenarios'
 import Settings from './pages/Settings'
 
 export default function App() {
@@ -15,11 +14,10 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/budget" element={<MonthlyView />} />
+        <Route path="/mortgages" element={<Mortgages />} />
+        <Route path="/cars" element={<Cars />} />
         <Route path="/transactions" element={<Transactions />} />
-        <Route path="/loans" element={<Loans />} />
-        <Route path="/leasing" element={<Leasing />} />
         <Route path="/savings" element={<Savings />} />
-        <Route path="/scenarios" element={<Scenarios />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>
