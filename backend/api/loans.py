@@ -33,6 +33,7 @@ def create_loan():
         monthly_amortization=data.get("monthly_amortization", 0),
         loan_type=data.get("loan_type", "mortgage"),
         category_id=data.get("category_id"),
+        payment_account_id=data.get("payment_account_id"),
     )
     db.session.add(loan)
     db.session.flush()
@@ -61,6 +62,8 @@ def update_loan(id):
     loan.monthly_amortization = data.get("monthly_amortization", loan.monthly_amortization)
     loan.loan_type = data.get("loan_type", loan.loan_type)
     loan.category_id = data.get("category_id", loan.category_id)
+    if "payment_account_id" in data:
+        loan.payment_account_id = data["payment_account_id"]
     db.session.commit()
     return jsonify(loan.to_dict())
 

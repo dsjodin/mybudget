@@ -189,14 +189,26 @@ def monthly_view():
         if c.parent_id and c.id not in cat_account_map and c.parent_id in cat_account_map:
             cat_account_map[c.id] = cat_account_map[c.parent_id]
 
+    # Build per-loan and per-leasing payment account costs (fixed monthly, same each month)
+    loan_pa_costs = {}  # payment_account_id -> monthly cost
+    for loan in loans:
+        if loan.payment_account_id:
+            cost = float(loan.monthly_amortization) + loan.monthly_interest_cost()
+            loan_pa_costs[loan.payment_account_id] = loan_pa_costs.get(loan.payment_account_id, 0) + cost
+
+    for lc in leasing:
+        if lc.payment_account_id:
+            loan_pa_costs[lc.payment_account_id] = loan_pa_costs.get(lc.payment_account_id, 0) + float(lc.monthly_cost)
+
     account_summaries = []
     for pa in payment_accounts:
         pa_cat_ids = [cid for cid, paid in cat_account_map.items() if paid == pa.id]
+        loan_cost = round(loan_pa_costs.get(pa.id, 0), 2)
         totals_per_month = {}
         for m in months:
             ms = str(m)
-            total = sum(month_actuals[m].get(cid, 0) for cid in pa_cat_ids)
-            totals_per_month[ms] = round(total, 2)
+            cat_total = sum(month_actuals[m].get(cid, 0) for cid in pa_cat_ids)
+            totals_per_month[ms] = round(cat_total + loan_cost, 2)
         account_summaries.append({
             "id": pa.id,
             "name": pa.name,

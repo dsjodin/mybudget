@@ -16,10 +16,14 @@ class LeasingContract(db.Model):
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=True
     )
+    payment_account_id = db.Column(
+        db.Integer, db.ForeignKey("payment_accounts.id", ondelete="SET NULL"), nullable=True
+    )
     note = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     category = db.relationship("Category", backref="leasing_contracts")
+    payment_account = db.relationship("PaymentAccount", backref="leasing_contracts")
 
     def months_remaining(self):
         today = date.today()
@@ -46,6 +50,7 @@ class LeasingContract(db.Model):
             "residual_value": float(self.residual_value) if self.residual_value else None,
             "mileage_limit": self.mileage_limit,
             "category_id": self.category_id,
+            "payment_account_id": self.payment_account_id,
             "note": self.note,
             "months_remaining": self.months_remaining(),
             "progress_percent": self.progress_percent(),

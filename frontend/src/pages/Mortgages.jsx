@@ -8,6 +8,7 @@ import { RATE_TYPES } from '../utils/constants'
 
 export default function Mortgages() {
   const [loans, setLoans] = useState([])
+  const [paymentAccounts, setPaymentAccounts] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [showRateModal, setShowRateModal] = useState(null)
@@ -18,9 +19,13 @@ export default function Mortgages() {
   const [form, setForm] = useState({
     name: '', lender: '', original_amount: '', current_balance: '',
     interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '',
+    payment_account_id: '',
   })
 
-  useEffect(() => { loadLoans() }, [])
+  useEffect(() => {
+    loadLoans()
+    api.getPaymentAccounts().then(setPaymentAccounts)
+  }, [])
 
   const loadLoans = () => api.getLoans('mortgage').then(setLoans)
 
@@ -33,6 +38,7 @@ export default function Mortgages() {
       interest_rate: parseFloat(form.interest_rate) / 100,
       monthly_amortization: parseFloat(form.monthly_amortization) || 0,
       loan_type: 'mortgage',
+      payment_account_id: form.payment_account_id ? parseInt(form.payment_account_id) : null,
     }
     if (editing) {
       await api.updateLoan(editing, data)
@@ -56,13 +62,14 @@ export default function Mortgages() {
       name: loan.name, lender: loan.lender || '', original_amount: String(loan.original_amount),
       current_balance: String(loan.current_balance), interest_rate: String(loan.interest_rate * 100),
       rate_type: loan.rate_type, start_date: loan.start_date, monthly_amortization: String(loan.monthly_amortization),
+      payment_account_id: loan.payment_account_id ? String(loan.payment_account_id) : '',
     })
     setEditing(loan.id)
     setShowForm(true)
   }
 
   const openNew = () => {
-    setForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '' })
+    setForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '', payment_account_id: '' })
     setEditing(null)
     setShowForm(true)
   }
@@ -197,6 +204,18 @@ export default function Mortgages() {
                   className="w-full border rounded-lg px-3 py-2" placeholder="0" />
               </div>
             </div>
+            {paymentAccounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Betalningskonto</label>
+                <select value={form.payment_account_id} onChange={e => setForm({ ...form, payment_account_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">-- Inget konto --</option>
+                  {paymentAccounts.map(pa => (
+                    <option key={pa.id} value={pa.id}>{pa.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => { setShowForm(false); setEditing(null) }}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Avbryt</button>

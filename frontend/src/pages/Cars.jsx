@@ -7,6 +7,7 @@ import { formatSEK, formatPercent, formatDate } from '../utils/format'
 export default function Cars() {
   const [carLoans, setCarLoans] = useState([])
   const [leasingContracts, setLeasingContracts] = useState([])
+  const [paymentAccounts, setPaymentAccounts] = useState([])
   const [showLoanForm, setShowLoanForm] = useState(false)
   const [showLeasingForm, setShowLeasingForm] = useState(false)
   const [editingLoan, setEditingLoan] = useState(null)
@@ -14,10 +15,12 @@ export default function Cars() {
   const [loanForm, setLoanForm] = useState({
     name: '', lender: '', original_amount: '', current_balance: '',
     interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '',
+    payment_account_id: '',
   })
   const [leasingForm, setLeasingForm] = useState({
     vehicle_name: '', monthly_cost: '', start_date: '', end_date: '',
     term_months: '', residual_value: '', mileage_limit: '', note: '',
+    payment_account_id: '',
   })
 
   useEffect(() => { loadAll() }, [])
@@ -25,6 +28,7 @@ export default function Cars() {
   const loadAll = () => {
     api.getLoans('car').then(setCarLoans)
     api.getLeasingContracts().then(setLeasingContracts)
+    api.getPaymentAccounts().then(setPaymentAccounts)
   }
 
   // Car loan handlers
@@ -37,6 +41,7 @@ export default function Cars() {
       interest_rate: parseFloat(loanForm.interest_rate) / 100,
       monthly_amortization: parseFloat(loanForm.monthly_amortization) || 0,
       loan_type: 'car',
+      payment_account_id: loanForm.payment_account_id ? parseInt(loanForm.payment_account_id) : null,
     }
     if (editingLoan) {
       await api.updateLoan(editingLoan, data)
@@ -60,13 +65,14 @@ export default function Cars() {
       name: loan.name, lender: loan.lender || '', original_amount: String(loan.original_amount),
       current_balance: String(loan.current_balance), interest_rate: String(loan.interest_rate * 100),
       rate_type: loan.rate_type, start_date: loan.start_date, monthly_amortization: String(loan.monthly_amortization),
+      payment_account_id: loan.payment_account_id ? String(loan.payment_account_id) : '',
     })
     setEditingLoan(loan.id)
     setShowLoanForm(true)
   }
 
   const openNewLoan = () => {
-    setLoanForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '' })
+    setLoanForm({ name: '', lender: '', original_amount: '', current_balance: '', interest_rate: '', rate_type: 'variable', start_date: '', monthly_amortization: '', payment_account_id: '' })
     setEditingLoan(null)
     setShowLoanForm(true)
   }
@@ -80,6 +86,7 @@ export default function Cars() {
       term_months: parseInt(leasingForm.term_months),
       residual_value: leasingForm.residual_value ? parseFloat(leasingForm.residual_value) : null,
       mileage_limit: leasingForm.mileage_limit ? parseInt(leasingForm.mileage_limit) : null,
+      payment_account_id: leasingForm.payment_account_id ? parseInt(leasingForm.payment_account_id) : null,
     }
     if (editingLeasing) {
       await api.updateLeasingContract(editingLeasing, data)
@@ -104,13 +111,14 @@ export default function Cars() {
       start_date: c.start_date, end_date: c.end_date, term_months: String(c.term_months),
       residual_value: c.residual_value ? String(c.residual_value) : '',
       mileage_limit: c.mileage_limit ? String(c.mileage_limit) : '', note: c.note || '',
+      payment_account_id: c.payment_account_id ? String(c.payment_account_id) : '',
     })
     setEditingLeasing(c.id)
     setShowLeasingForm(true)
   }
 
   const openNewLeasing = () => {
-    setLeasingForm({ vehicle_name: '', monthly_cost: '', start_date: '', end_date: '', term_months: '', residual_value: '', mileage_limit: '', note: '' })
+    setLeasingForm({ vehicle_name: '', monthly_cost: '', start_date: '', end_date: '', term_months: '', residual_value: '', mileage_limit: '', note: '', payment_account_id: '' })
     setEditingLeasing(null)
     setShowLeasingForm(true)
   }
@@ -261,6 +269,18 @@ export default function Cars() {
               <input type="number" value={loanForm.monthly_amortization} onChange={e => setLoanForm({ ...loanForm, monthly_amortization: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2" placeholder="0" />
             </div>
+            {paymentAccounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Betalningskonto</label>
+                <select value={loanForm.payment_account_id} onChange={e => setLoanForm({ ...loanForm, payment_account_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">-- Inget konto --</option>
+                  {paymentAccounts.map(pa => (
+                    <option key={pa.id} value={pa.id}>{pa.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => { setShowLoanForm(false); setEditingLoan(null) }}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Avbryt</button>
@@ -318,6 +338,18 @@ export default function Cars() {
               <input type="text" value={leasingForm.note} onChange={e => setLeasingForm({ ...leasingForm, note: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2" />
             </div>
+            {paymentAccounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Betalningskonto</label>
+                <select value={leasingForm.payment_account_id} onChange={e => setLeasingForm({ ...leasingForm, payment_account_id: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">-- Inget konto --</option>
+                  {paymentAccounts.map(pa => (
+                    <option key={pa.id} value={pa.id}>{pa.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => { setShowLeasingForm(false); setEditingLeasing(null) }}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Avbryt</button>

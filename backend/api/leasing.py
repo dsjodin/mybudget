@@ -23,6 +23,7 @@ def create_contract():
         residual_value=data.get("residual_value"),
         mileage_limit=data.get("mileage_limit"),
         category_id=data.get("category_id"),
+        payment_account_id=data.get("payment_account_id"),
         note=data.get("note"),
     )
     db.session.add(contract)
@@ -36,7 +37,7 @@ def update_contract(id):
     data = request.get_json()
     for field in ["vehicle_name", "monthly_cost", "start_date", "end_date",
                    "term_months", "residual_value", "mileage_limit",
-                   "category_id", "note"]:
+                   "category_id", "payment_account_id", "note"]:
         if field in data:
             setattr(contract, field, data[field])
     db.session.commit()

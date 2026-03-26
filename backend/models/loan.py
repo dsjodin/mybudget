@@ -20,9 +20,13 @@ class Loan(db.Model):
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=True
     )
+    payment_account_id = db.Column(
+        db.Integer, db.ForeignKey("payment_accounts.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     category = db.relationship("Category", backref="loans")
+    payment_account = db.relationship("PaymentAccount", backref="loans")
     rate_history = db.relationship(
         "LoanRateHistory", backref="loan", cascade="all, delete-orphan",
         order_by="LoanRateHistory.effective_date.desc()"
@@ -48,6 +52,7 @@ class Loan(db.Model):
             "monthly_interest_cost": self.monthly_interest_cost(),
             "loan_type": self.loan_type,
             "category_id": self.category_id,
+            "payment_account_id": self.payment_account_id,
         }
 
 
